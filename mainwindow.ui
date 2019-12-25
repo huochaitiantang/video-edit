@@ -14,17 +14,17 @@
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QLabel" name="InfoLabel">
+   <widget class="QLabel" name="img_label_info">
     <property name="geometry">
      <rect>
-      <x>20</x>
-      <y>0</y>
+      <x>10</x>
+      <y>530</y>
       <width>521</width>
-      <height>181</height>
+      <height>20</height>
      </rect>
     </property>
     <property name="text">
-     <string>TextLabel</string>
+     <string>Info</string>
     </property>
    </widget>
   </widget>

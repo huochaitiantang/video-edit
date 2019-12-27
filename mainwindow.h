@@ -2,6 +2,8 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QDesktopWidget>
+#include <QVBoxLayout>
 #include "imglabel.h"
 
 QT_BEGIN_NAMESPACE
@@ -16,6 +18,7 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     ImgLabel * imglabel;
+    void adjust_size();
 
 
 private:

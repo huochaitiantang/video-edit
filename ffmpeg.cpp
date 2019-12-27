@@ -16,7 +16,7 @@ extern "C" {
 }
 #include "ffmpeg.h"
 
-static int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFrame *pFrame, unsigned char * data){
+static int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFrame *pFrame, unsigned char ** data){
     // Supply raw packet data as input to a decoder
     int response = avcodec_send_packet(pCodecContext, pPacket);
     if(response < 0){
@@ -28,7 +28,6 @@ static int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFra
         // Return decoded output data (into a frame) from a decoder
         response = avcodec_receive_frame(pCodecContext, pFrame);
         if (response == AVERROR(EAGAIN) || response == AVERROR_EOF){
-            printf("Reutrn here\n");
             break;
         }
         else if(response < 0){
@@ -45,24 +44,54 @@ static int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFra
                 pFrame->key_frame,
                 pFrame->coded_picture_number);
 
-            int linesize = pFrame->linesize[0];
-            data = pFrame->data[0];
-            printf("DenotePacket: linesize=%d width=%d height=%d format=%s\n", linesize, pFrame->width, pFrame->height, pFrame->format);
+            printf("DenotePacket: linesize: Y=%d U=%d V=%d width=%d height=%d format=%d\n",
+                   pFrame->linesize[0], pFrame->linesize[1], pFrame->linesize[2], pFrame->width, pFrame->height, pFrame->format);
 
+            // alloc rgb frame memory
+            AVFrame *rgbFrame = av_frame_alloc();
+            if(!rgbFrame){
+                printf("failed to allocated memory for AVFrame\n");
+                return -1;
+            }
+            rgbFrame->height = pFrame->height;
+            rgbFrame->width  = pFrame->width;
+            rgbFrame->format = AV_PIX_FMT_RGB24;
+            if(av_frame_get_buffer(rgbFrame, 0) < 0){
+                printf("failed to allocated memory for AVFrame buffer\n");
+                return -1;
+            }
+
+            // create a swith context, for example, AV_PIX_FMT_YUV420P to AV_PIX_FMT_RGB24
+            SwsContext* sws_context = sws_getContext(pFrame->width, pFrame->height, AVPixelFormat(pFrame->format),
+                                                     rgbFrame->width, rgbFrame->height, AVPixelFormat(rgbFrame->format),
+                                                     SWS_BICUBIC, 0, 0, 0);
+            // perform conversion
+            sws_scale(sws_context, pFrame->data, pFrame->linesize, 0, pFrame->height, rgbFrame->data, rgbFrame->linesize);
+            printf("After conversion: linesize: %d width=%d height=%d format=%d\n",
+                           rgbFrame->linesize[0], rgbFrame->width, rgbFrame->height, rgbFrame->format);
+
+            unsigned char * tmpdata;
+            tmpdata = (unsigned char *)malloc(sizeof(unsigned char) * rgbFrame->height * rgbFrame->width * 3);
+            int k = 0;
+            for(int h = 0; h < rgbFrame->height; h++){
+                for(int w = 0; w < rgbFrame->width; w++){
+                    int base = h * rgbFrame->linesize[0] + w * 3;
+                    tmpdata[k++] = rgbFrame->data[0][base];
+                    tmpdata[k++] = rgbFrame->data[0][base+1];
+                    tmpdata[k++] = rgbFrame->data[0][base+2];
+                }
+            }
+            *data = tmpdata;
+            sws_freeContext(sws_context);
+            av_frame_free(&rgbFrame);
             return 0;
-
-
-            //char frame_filename[1024];
-            //snprintf(frame_filename, sizeof(frame_filename), "%s-%d.pgm", "frame", pCodecContext->frame_number);
-            // save a grayscale frame into a .pgm file
-            //save_gray_frame(pFrame->data[0], pFrame->linesize[0], pFrame->width, pFrame->height, frame_filename);
         }
     }
-    return 0;
+    return -1;
 }
 
 
-void read_one_frame(char* movie_name, unsigned char* data, int* channel, int* height, int* width){
+void read_one_frame(char* movie_name, unsigned char** data, int* channel, int* height, int* width){
 
     AVFormatContext *pFormatContext = avformat_alloc_context();
     if(!pFormatContext){
@@ -119,6 +148,7 @@ void read_one_frame(char* movie_name, unsigned char* data, int* channel, int* he
 
     *height = pCodecParameters->height;
     *width = pCodecParameters->width;
+    *channel = 3;
 
     AVCodecContext *pCodecContext = avcodec_alloc_context3(pCodec);
     if(!pCodecContext){
@@ -160,15 +190,15 @@ void read_one_frame(char* movie_name, unsigned char* data, int* channel, int* he
             printf("AVPacket->pts %" PRId64, pPacket->pts);
             printf("\n");
             response = decode_packet(pPacket, pCodecContext, pFrame, data);
-            //break;
-            if (response < 0) break;
+            // only for one frame
+            if (response == 0) break;
             // stop it, otherwise we'll be saving hundreds of frames
             if (--how_many_packets_to_process <= 0) break;
         }
         av_packet_unref(pPacket);
     }
 
-    printf("releasing all the resources\n");
+    printf("Releasing all the resources\n");
     avformat_close_input(&pFormatContext);
     avformat_free_context(pFormatContext);
     av_packet_free(&pPacket);

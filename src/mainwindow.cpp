@@ -1,5 +1,5 @@
 
-#include "mainwindow.h"
+#include "include/mainwindow.h"
 #include "ui_mainwindow.h"
 #include <stdio.h>
 #include <stdarg.h>
@@ -19,7 +19,7 @@ MainWindow::MainWindow(QWidget *parent)
     this->adjust_size();
 
     char movie_name[64] = "E:/QT/videos/S2-P5-160912.mp4";
-    unsigned char** data;
+    unsigned char** data; // TODO: vector
     int channel, height, width;
 
     data = (unsigned char**)malloc(sizeof(unsigned char*));
@@ -37,6 +37,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     free(*data);
     free(data);
+
 
 }
 

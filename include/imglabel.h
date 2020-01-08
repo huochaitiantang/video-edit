@@ -19,7 +19,7 @@ class ImgLabel : public QLabel
         int W = 540;
         int H = 360;
         ImgLabel(QWidget *parent, QLabel *info);
-        //~ImgLabel();
+        ~ImgLabel();
         void set_image(int channel, int height, int width, unsigned char * data);
         void set_pixel();
 

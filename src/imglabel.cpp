@@ -7,14 +7,13 @@ ImgLabel::ImgLabel(QWidget *parent, QLabel *info) : QLabel(parent){
     this->info->setGeometry(20, 40 + this->H, this->W, 20);
 }
 
-/*
-ImgLabel::~ImgLabel() : ~QLabel(){
-    free(this->info);
+
+ImgLabel::~ImgLabel(){
     if(this->image != NULL){
         delete this->image;
     }
 }
-*/
+
 
 
 void ImgLabel::set_image(int channel, int height, int width, unsigned char * data){

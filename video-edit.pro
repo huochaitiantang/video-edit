@@ -16,22 +16,25 @@ DEFINES += QT_DEPRECATED_WARNINGS
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
-    ffmpeg.cpp \
-    imglabel.cpp \
-    main.cpp \
-    mainwindow.cpp
+    src/movie.cpp \
+    src/ffmpeg.cpp \
+    src/imglabel.cpp \
+    src/main.cpp \
+    src/mainwindow.cpp
 
 INCLUDEPATH += E:\ffmpeg-dev\include
+INCLUDEPATH += include\
 DEPENDPATH += E:\ffmpeg-dev\include
 LIBS += -LE:\ffmpeg-dev\lib -lavutil -lavformat -lavcodec -lavdevice -lavfilter -lpostproc -lswresample -lswscale
 
 HEADERS += \
-    ffmpeg.h \
-    imglabel.h \
-    mainwindow.h
+    include/ffmpeg.h \
+    include/imglabel.h \
+    include/mainwindow.h \
+    include/movie.h
 
 FORMS += \
-    mainwindow.ui
+    ui/mainwindow.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

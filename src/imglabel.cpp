@@ -1,10 +1,10 @@
 #include "imglabel.h"
 
-
 ImgLabel::ImgLabel(QWidget *parent, QLabel *info) : QLabel(parent){
     this->info = info;
     this->setGeometry(20, 40, this->W, this->H);
     this->info->setGeometry(20, 40 + this->H, this->W, 20);
+    movie = new Movie();
 }
 
 
@@ -12,8 +12,37 @@ ImgLabel::~ImgLabel(){
     if(this->image != NULL){
         delete this->image;
     }
+    delete movie;
 }
 
+
+void ImgLabel::set_movie(std::string path){
+    movie->init(path);
+
+    int h = movie->get_height();
+    int w = movie->get_width();
+    int H = this->H;
+    int W = this->W;
+
+    double ratio_h = (double)H / h;
+    double ratio_w = (double)W / w;
+    double ratio = std::min(ratio_h, ratio_w);
+    image_h = (int)(h * ratio);
+    image_w = (int)(w * ratio);
+    top_h = (H - image_h) / 2;
+    top_w = (W - image_w) / 2;
+    image = new QImage(image_w, image_h, QImage::Format_RGB888);
+}
+
+
+bool ImgLabel::display_next_frame(){
+    if(movie->next_video_frame(image_h, image_w)){
+        movie->write_qimage(image, top_h, top_w);
+        this->setPixmap(QPixmap::fromImage(*image));
+        return true;
+    }
+    else return false;
+}
 
 
 void ImgLabel::set_image(int channel, int height, int width, unsigned char * data){

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <iostream>
 
 #include "ffmpeg.h"
 
@@ -18,6 +19,14 @@ MainWindow::MainWindow(QWidget *parent)
     imglabel = new ImgLabel(this, ui->img_label_info);
     this->adjust_size();
 
+    std::string path = "E:/QT/videos/S2-P5-160912.mp4";
+    imglabel->set_movie(path);
+
+    while(imglabel->display_next_frame()){
+        std::cout << "display new frame!" << std::endl;
+    }
+
+    /*
     char movie_name[64] = "E:/QT/videos/S2-P5-160912.mp4";
     unsigned char** data; // TODO: vector
     int channel, height, width;
@@ -34,9 +43,9 @@ MainWindow::MainWindow(QWidget *parent)
     this->imglabel->set_pixel();
     this->imglabel->info->setText("Hello world!");
 
-
     free(*data);
     free(data);
+    */
 
 
 }

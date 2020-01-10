@@ -16,6 +16,7 @@ extern "C" {
 }
 
 #include<string>
+#include<QImage>
 
 class Movie
 {
@@ -23,6 +24,8 @@ private:
     std::string movie_name;
     int height,width;
     double fps;
+    int video_frame_index;
+    bool ret_packet = false;
 
     int video_stream_index, audio_stream_index;
     AVFormatContext * format_ctx;
@@ -32,6 +35,7 @@ private:
 
     AVFrame * video_frame = NULL;
     AVFrame * audio_frame = NULL;
+    AVFrame * rgb_frame = NULL;
 
     AVPacket * video_packet = NULL;
     AVPacket * audio_packet = NULL;
@@ -42,14 +46,19 @@ private:
     AVCodecParameters * video_codec_parameters = NULL;
     AVCodecParameters * audio_codec_parameters = NULL;
 
-    int next_video_packet();
-    int next_video_frame();
+    bool next_video_packet();
+    void write_rgb_frame(int h, int w);
+
 
 
 public:
     Movie();
     ~Movie();
     void Movie::init(std::string move_path);
+    bool next_video_frame(int h, int w);
+    void write_qimage(QImage * img, int top_h, int top_w);
+    int get_width();
+    int get_height();
 
 };
 

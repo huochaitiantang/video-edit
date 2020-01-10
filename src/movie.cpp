@@ -2,14 +2,18 @@
 #include<iostream>
 #include "movie.h"
 
+
 Movie::Movie()
 {
     format_ctx = avformat_alloc_context();
     video_frame = av_frame_alloc();
     audio_frame = av_frame_alloc();
+    rgb_frame = av_frame_alloc();
     video_packet = av_packet_alloc();
     audio_packet = av_packet_alloc();
-    assert(format_ctx && video_frame && audio_frame && video_packet && audio_packet);
+    rgb_frame->format = AV_PIX_FMT_RGB24;
+    assert(format_ctx && video_frame && audio_frame &&
+           rgb_frame && video_packet && audio_packet);
 }
 
 Movie::~Movie()
@@ -20,6 +24,7 @@ Movie::~Movie()
     av_packet_free(&audio_packet);
     av_frame_free(&video_frame);
     av_frame_free(&audio_frame);
+    av_frame_free(&rgb_frame);
 
     if(video_codec_ctx) avcodec_free_context(&video_codec_ctx);
     if(audio_codec_ctx) avcodec_free_context(&audio_codec_ctx);
@@ -75,7 +80,100 @@ void Movie::init(std::string path)
         //audio_codec_ctx = avcodec_alloc_context3(video_codec);
         assert(0);
     }
-
     std::cout << "Movie Init:" << std::endl;
 
+}
+
+// get the next video packet to the video_packet
+bool Movie::next_video_packet(){
+    bool ret = false;
+    while(av_read_frame(format_ctx, video_packet) >= 0){
+        if(video_packet->stream_index == video_stream_index){
+            ret = true;
+            break;
+        }
+    }
+    if(ret){
+        assert(avcodec_send_packet(video_codec_ctx, video_packet) >= 0);
+    }
+    return ret;
+}
+
+
+// get the next video frame to the video_frame
+bool Movie::next_video_frame(int h, int w){
+    while(true){
+        if(!ret_packet){
+            ret_packet = next_video_packet();
+        }
+        if(ret_packet){
+            int ret = avcodec_receive_frame(video_codec_ctx, video_frame);
+            // if current packet not satisfied, get net packet
+            if(ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF){
+                ret_packet = false;
+                continue;
+            }
+            // frame that we want, write to the rgb frame buff
+            else{
+                video_frame_index = video_codec_ctx->frame_number;
+                write_rgb_frame(h, w);
+                return true;
+            }
+        }
+        // no more packet
+        else{
+            return false;
+        }
+    }
+}
+
+
+void Movie::write_rgb_frame(int h, int w){
+    rgb_frame->height = h;
+    rgb_frame->width = w;
+
+    // create a swith context, for example, AV_PIX_FMT_YUV420P to AV_PIX_FMT_RGB24
+    SwsContext* sws_context = sws_getContext(video_frame->width,
+                                             video_frame->height,
+                                             AVPixelFormat(video_frame->format),
+                                             rgb_frame->width,
+                                             rgb_frame->height,
+                                             AVPixelFormat(rgb_frame->format),
+                                             SWS_BICUBIC, 0, 0, 0);
+    // perform conversion
+    sws_scale(sws_context, video_frame->data, video_frame->linesize, 0,
+              video_frame->height, rgb_frame->data, rgb_frame->linesize);
+
+    std::cout << "After conversion: linesize: " << rgb_frame->linesize[0] <<
+            " width=" << rgb_frame->width <<
+            " height" << rgb_frame->height <<
+            " format=" << rgb_frame->format << std::endl;
+    return;
+}
+
+
+// write the rgb frame to qimage
+void Movie::write_qimage(QImage * img, int top_h, int top_w){
+    assert((img->height() >= rgb_frame->height) &&
+           (img->width() >= rgb_frame->width));
+    int h, w, k = 0, base;
+    unsigned char rr, gg, bb;
+    for(h = 0; h < rgb_frame->height; h++){
+        for(w = 0; w < rgb_frame->width; w++){
+            base = h * rgb_frame->linesize[0] + w * 3;
+            rr = rgb_frame->data[0][base];
+            gg = rgb_frame->data[0][base+1];
+            bb = rgb_frame->data[0][base+2];
+            img->setPixel(top_w + w, top_h + h, qRgb(rr, gg, bb));
+        }
+    }
+    return;
+}
+
+int Movie::get_width(){
+    return width;
+}
+
+int Movie::get_height(){
+    return height;
 }

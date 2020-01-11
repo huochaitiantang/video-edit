@@ -17,7 +17,6 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += \
     src/movie.cpp \
-    src/ffmpeg.cpp \
     src/imglabel.cpp \
     src/main.cpp \
     src/mainwindow.cpp
@@ -28,7 +27,6 @@ DEPENDPATH += E:\ffmpeg-dev\include
 LIBS += -LE:\ffmpeg-dev\lib -lavutil -lavformat -lavcodec -lavdevice -lavfilter -lpostproc -lswresample -lswscale
 
 HEADERS += \
-    include/ffmpeg.h \
     include/imglabel.h \
     include/mainwindow.h \
     include/movie.h

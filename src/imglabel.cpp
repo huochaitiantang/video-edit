@@ -1,4 +1,5 @@
 #include "imglabel.h"
+#include <iostream>
 
 ImgLabel::ImgLabel(QWidget *parent, QLabel *info) : QLabel(parent){
     this->info = info;
@@ -21,71 +22,29 @@ void ImgLabel::set_movie(std::string path){
 
     int h = movie->get_height();
     int w = movie->get_width();
-    int H = this->H;
-    int W = this->W;
 
     double ratio_h = (double)H / h;
     double ratio_w = (double)W / w;
     double ratio = std::min(ratio_h, ratio_w);
+
     image_h = (int)(h * ratio);
     image_w = (int)(w * ratio);
     top_h = (H - image_h) / 2;
     top_w = (W - image_w) / 2;
-    image = new QImage(image_w, image_h, QImage::Format_RGB888);
+
+    image = new QImage(W, H, QImage::Format_RGB888);
+    movie->init_rgb_frame(image_h, image_w);
+
 }
 
 
 bool ImgLabel::display_next_frame(){
-    if(movie->next_video_frame(image_h, image_w)){
+    if(movie->next_video_frame()){
         movie->write_qimage(image, top_h, top_w);
         this->setPixmap(QPixmap::fromImage(*image));
         return true;
     }
     else return false;
-}
-
-
-void ImgLabel::set_image(int channel, int height, int width, unsigned char * data){
-
-    if(this->image == NULL){
-        QImage * tmpImage = new QImage(width, height, QImage::Format_RGB888);
-        this->image = tmpImage;
-    }
-
-    if(this->image->width() != width || this->image->height() != height){
-        delete this->image;
-        QImage * tmpImage = new QImage(width, height, QImage::Format_RGB888);
-        this->image = tmpImage;
-    }
-
-    for(int h = 0; h < height; h++){
-        for(int w = 0; w < width; w++){
-            int base = (h * width + w) * 3;
-            this->image->setPixel(w, h, qRgb(data[base], data[base+1], data[base+2]));
-        }
-    }
-    return;
-}
-
-
-void ImgLabel::set_pixel(){
-
-    int h = this->image->height();
-    int w = this->image->width();
-    int H = this->H;
-    int W = this->W;
-
-    double ratio_h = (double)H / h;
-    double ratio_w = (double)W / w;
-    double ratio = std::min(ratio_h, ratio_w);
-    int new_h = (int)(h * ratio);
-    int new_w = (int)(w * ratio);
-
-    QImage tmpImage = this->image->scaled(this->W, this->H, Qt::KeepAspectRatioByExpanding);
-    //this->setPixmap(QPixmap::fromImage(*this->image));
-    this->setPixmap(QPixmap::fromImage(tmpImage));
-
-    return;
 }
 
 
@@ -99,6 +58,7 @@ void ImgLabel::getRelativeXY(int px, int py, int * x, int * y){
 }
 
 void ImgLabel::mouseMoveEvent(QMouseEvent *event){
+    /*
     int abs_x = event->x();
     int abs_y = event->y();
     int x,y;
@@ -107,6 +67,7 @@ void ImgLabel::mouseMoveEvent(QMouseEvent *event){
     sprintf(ss, "x=%d, y=%d", x, y);
     QString qss(ss);
     this->info->setText(qss);
+    */
     return;
 }
 
@@ -119,6 +80,18 @@ void ImgLabel::mouseReleaseEvent(QMouseEvent *event){
 }
 
 void ImgLabel::paintEvent(QPaintEvent *event){
+    int ind;
+    char ss[100];
+    bool ret = display_next_frame();
+    if(ret){
+        ind = movie->get_video_frame_index();
+        sprintf(ss, "frame index: %d", ind);
+        QString qss(ss);
+        this->info->setText(qss);
+        std::cout << "Display new frame: " << ind << std::endl;
+    }
+
     QLabel::paintEvent(event);
+
 }
 

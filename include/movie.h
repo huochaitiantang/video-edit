@@ -47,18 +47,20 @@ private:
     AVCodecParameters * audio_codec_parameters = NULL;
 
     bool next_video_packet();
-    void write_rgb_frame(int h, int w);
+    void write_rgb_frame();
 
 
 
 public:
     Movie();
     ~Movie();
-    void Movie::init(std::string move_path);
-    bool next_video_frame(int h, int w);
+    void init(std::string move_path);
+    void init_rgb_frame(int h, int w);
+    bool next_video_frame();
     void write_qimage(QImage * img, int top_h, int top_w);
     int get_width();
     int get_height();
+    int get_video_frame_index();
 
 };
 

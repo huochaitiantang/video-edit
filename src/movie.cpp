@@ -8,12 +8,12 @@ Movie::Movie()
     format_ctx = avformat_alloc_context();
     video_frame = av_frame_alloc();
     audio_frame = av_frame_alloc();
-    rgb_frame = av_frame_alloc();
+
     video_packet = av_packet_alloc();
     audio_packet = av_packet_alloc();
-    rgb_frame->format = AV_PIX_FMT_RGB24;
+
     assert(format_ctx && video_frame && audio_frame &&
-           rgb_frame && video_packet && audio_packet);
+           video_packet && audio_packet);
 }
 
 Movie::~Movie()
@@ -33,7 +33,7 @@ Movie::~Movie()
 void Movie::init(std::string path)
 {
     movie_name = path;
-    assert(avformat_open_input(&format_ctx, path.c_str(), NULL, NULL));
+    assert(avformat_open_input(&format_ctx, path.c_str(), NULL, NULL) == 0);
     assert(avformat_find_stream_info(format_ctx,  NULL) >= 0);
 
     // find the video codec parameters and audio codec parameters
@@ -76,12 +76,12 @@ void Movie::init(std::string path)
 
     // init the contex, codec of audio
     if(audio_codec_parameters){
-        //audio_codec = avcodec_find_decoder(audio_codec_parameters->codec_id);
-        //audio_codec_ctx = avcodec_alloc_context3(video_codec);
-        assert(0);
-    }
-    std::cout << "Movie Init:" << std::endl;
+        audio_codec = avcodec_find_decoder(audio_codec_parameters->codec_id);
+        audio_codec_ctx = avcodec_alloc_context3(video_codec);
 
+    }
+    std::cout << "Movie Init" << std::endl;
+    return;
 }
 
 // get the next video packet to the video_packet
@@ -101,7 +101,7 @@ bool Movie::next_video_packet(){
 
 
 // get the next video frame to the video_frame
-bool Movie::next_video_frame(int h, int w){
+bool Movie::next_video_frame(){
     while(true){
         if(!ret_packet){
             ret_packet = next_video_packet();
@@ -116,7 +116,7 @@ bool Movie::next_video_frame(int h, int w){
             // frame that we want, write to the rgb frame buff
             else{
                 video_frame_index = video_codec_ctx->frame_number;
-                write_rgb_frame(h, w);
+                write_rgb_frame();
                 return true;
             }
         }
@@ -128,9 +128,18 @@ bool Movie::next_video_frame(int h, int w){
 }
 
 
-void Movie::write_rgb_frame(int h, int w){
+void Movie::init_rgb_frame(int h, int w){
+    rgb_frame = av_frame_alloc();
+    assert(rgb_frame);
+
     rgb_frame->height = h;
     rgb_frame->width = w;
+    rgb_frame->format = AV_PIX_FMT_RGB24;
+    assert(av_frame_get_buffer(rgb_frame, 0) >= 0);
+}
+
+
+void Movie::write_rgb_frame(){
 
     // create a swith context, for example, AV_PIX_FMT_YUV420P to AV_PIX_FMT_RGB24
     SwsContext* sws_context = sws_getContext(video_frame->width,
@@ -146,7 +155,7 @@ void Movie::write_rgb_frame(int h, int w){
 
     std::cout << "After conversion: linesize: " << rgb_frame->linesize[0] <<
             " width=" << rgb_frame->width <<
-            " height" << rgb_frame->height <<
+            " height=" << rgb_frame->height <<
             " format=" << rgb_frame->format << std::endl;
     return;
 }
@@ -156,7 +165,7 @@ void Movie::write_rgb_frame(int h, int w){
 void Movie::write_qimage(QImage * img, int top_h, int top_w){
     assert((img->height() >= rgb_frame->height) &&
            (img->width() >= rgb_frame->width));
-    int h, w, k = 0, base;
+    int h, w, base;
     unsigned char rr, gg, bb;
     for(h = 0; h < rgb_frame->height; h++){
         for(w = 0; w < rgb_frame->width; w++){
@@ -176,4 +185,8 @@ int Movie::get_width(){
 
 int Movie::get_height(){
     return height;
+}
+
+int Movie::get_video_frame_index(){
+    return video_frame_index;
 }

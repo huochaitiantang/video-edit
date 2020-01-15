@@ -24,6 +24,9 @@ public:
 private:
     Ui::MainWindow *ui;
 
+private slots:
+    void on_open_movie_clicked();
+
 
 };
 #endif // MAINWINDOW_H

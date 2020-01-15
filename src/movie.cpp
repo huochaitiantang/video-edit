@@ -28,6 +28,7 @@ Movie::~Movie()
 
     if(video_codec_ctx) avcodec_free_context(&video_codec_ctx);
     if(audio_codec_ctx) avcodec_free_context(&audio_codec_ctx);
+    if(sws_context) sws_freeContext(sws_context);
 }
 
 void Movie::init(std::string path)
@@ -142,13 +143,15 @@ void Movie::init_rgb_frame(int h, int w){
 void Movie::write_rgb_frame(){
 
     // create a swith context, for example, AV_PIX_FMT_YUV420P to AV_PIX_FMT_RGB24
-    SwsContext* sws_context = sws_getContext(video_frame->width,
+    if(sws_context == NULL){
+        sws_context = sws_getContext(video_frame->width,
                                              video_frame->height,
                                              AVPixelFormat(video_frame->format),
                                              rgb_frame->width,
                                              rgb_frame->height,
                                              AVPixelFormat(rgb_frame->format),
                                              SWS_BICUBIC, 0, 0, 0);
+    }
     // perform conversion
     sws_scale(sws_context, video_frame->data, video_frame->linesize, 0,
               video_frame->height, rgb_frame->data, rgb_frame->linesize);
@@ -166,14 +169,14 @@ void Movie::write_qimage(QImage * img, int top_h, int top_w){
     assert((img->height() >= rgb_frame->height) &&
            (img->width() >= rgb_frame->width));
     int h, w, base;
-    unsigned char rr, gg, bb;
+    unsigned char * line_data;
     for(h = 0; h < rgb_frame->height; h++){
+        line_data = img->scanLine(h);
         for(w = 0; w < rgb_frame->width; w++){
             base = h * rgb_frame->linesize[0] + w * 3;
-            rr = rgb_frame->data[0][base];
-            gg = rgb_frame->data[0][base+1];
-            bb = rgb_frame->data[0][base+2];
-            img->setPixel(top_w + w, top_h + h, qRgb(rr, gg, bb));
+            line_data[w * 3 + 0] = rgb_frame->data[0][base + 0];
+            line_data[w * 3 + 1] = rgb_frame->data[0][base + 1];
+            line_data[w * 3 + 2] = rgb_frame->data[0][base + 2];
         }
     }
     return;
@@ -189,4 +192,8 @@ int Movie::get_height(){
 
 int Movie::get_video_frame_index(){
     return video_frame_index;
+}
+
+std::string Movie::get_movie_name(){
+    return movie_name;
 }

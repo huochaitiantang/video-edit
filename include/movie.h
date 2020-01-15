@@ -21,7 +21,7 @@ extern "C" {
 class Movie
 {
 private:
-    std::string movie_name;
+    std::string movie_name = "";
     int height,width;
     double fps;
     int video_frame_index;
@@ -46,6 +46,8 @@ private:
     AVCodecParameters * video_codec_parameters = NULL;
     AVCodecParameters * audio_codec_parameters = NULL;
 
+    SwsContext* sws_context = NULL;
+
     bool next_video_packet();
     void write_rgb_frame();
 
@@ -61,6 +63,7 @@ public:
     int get_width();
     int get_height();
     int get_video_frame_index();
+    std::string get_movie_name();
 
 };
 

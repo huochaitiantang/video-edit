@@ -17,10 +17,11 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     imglabel = new ImgLabel(this, ui->img_label_info);
     this->adjust_size();
+    ui->open_movie->setGeometry(20, 60 + 360, 540, 20);
 
-    std::string path = "E:/QT/videos/S2-P5-160912.mp4";
-    imglabel->set_movie(path);
-
+    //for debug
+    //std::string path = "E:/QT/videos/S2-P5-160912.mp4";
+    //imglabel->set_movie(path);
 }
 
 void MainWindow::adjust_size(){
@@ -32,6 +33,17 @@ void MainWindow::adjust_size(){
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::on_open_movie_clicked()
+{
+    // parent, caption, default dir, filter
+    QString qpath = QFileDialog::getOpenFileName(this, tr("Chose a Movie"), "", tr("Movie (*.mp4 *.mkv *.avi)"));
+    if(qpath.isEmpty()) return;
+
+    imglabel->clear_movie();
+    imglabel->set_movie(qpath.toStdString());
+
 }
 
 

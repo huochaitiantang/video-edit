@@ -15,22 +15,24 @@
 
 class ImgLabel : public QLabel
 {
-    public:
-        QImage * image;
+    private:
+        QImage * image = NULL;
         QLabel * info;
-        Movie* movie;
+        Movie* movie = NULL;
         int W = 540;
         int H = 360;
         int image_h, image_w, top_h, top_w;
+        bool has_movie = false;
 
-        ImgLabel(QWidget *parent, QLabel *info);
-        ~ImgLabel();
         void set_image(int channel, int height, int width, unsigned char * data);
         void set_pixel();
-        void set_movie(std::string path);
         bool display_next_frame();
 
-
+    public:
+        ImgLabel(QWidget *parent, QLabel *info);
+        ~ImgLabel();
+        void set_movie(std::string path);
+        void clear_movie();
 
     protected:
         void mouseMoveEvent(QMouseEvent *event);

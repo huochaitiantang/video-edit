@@ -5,7 +5,6 @@ ImgLabel::ImgLabel(QWidget *parent, QLabel *info) : QLabel(parent){
     this->info = info;
     this->setGeometry(20, 40, this->W, this->H);
     this->info->setGeometry(20, 40 + this->H, this->W, 20);
-    movie = new Movie();
 }
 
 
@@ -18,7 +17,8 @@ ImgLabel::~ImgLabel(){
 
 
 void ImgLabel::set_movie(std::string path){
-    movie->init(path);
+    this->movie = new Movie();
+    this->movie->init(path);
 
     int h = movie->get_height();
     int w = movie->get_width();
@@ -27,21 +27,36 @@ void ImgLabel::set_movie(std::string path){
     double ratio_w = (double)W / w;
     double ratio = std::min(ratio_h, ratio_w);
 
-    image_h = (int)(h * ratio);
-    image_w = (int)(w * ratio);
-    top_h = (H - image_h) / 2;
-    top_w = (W - image_w) / 2;
+    this->image_h = (int)(h * ratio);
+    this->image_w = (int)(w * ratio);
+    this->top_h = (H - image_h) / 2;
+    this->top_w = (W - image_w) / 2;
 
-    image = new QImage(W, H, QImage::Format_RGB888);
-    movie->init_rgb_frame(image_h, image_w);
+    if(this->image){
+        delete this->image;
+    }
 
+    this->image = new QImage(W, H, QImage::Format_RGB888);
+    this->movie->init_rgb_frame(image_h, image_w);
+}
+
+void ImgLabel::clear_movie(){
+    if(this->movie){
+        delete this->movie;
+        this->movie = NULL;
+    }
 }
 
 
 bool ImgLabel::display_next_frame(){
-    if(movie->next_video_frame()){
-        movie->write_qimage(image, top_h, top_w);
-        this->setPixmap(QPixmap::fromImage(*image));
+    if((this->movie) && (this->movie->next_video_frame())){
+
+        // TODO: still a little memory leak
+        this->movie->write_qimage(image, top_h, top_w);
+        this->setPixmap(QPixmap::fromImage(*(this->image)));
+
+        int ind = movie->get_video_frame_index();
+        this->info->setText(QString("frame index: %1").arg(ind));
         return true;
     }
     else return false;
@@ -80,18 +95,7 @@ void ImgLabel::mouseReleaseEvent(QMouseEvent *event){
 }
 
 void ImgLabel::paintEvent(QPaintEvent *event){
-    int ind;
-    char ss[100];
-    bool ret = display_next_frame();
-    if(ret){
-        ind = movie->get_video_frame_index();
-        sprintf(ss, "frame index: %d", ind);
-        QString qss(ss);
-        this->info->setText(qss);
-        std::cout << "Display new frame: " << ind << std::endl;
-    }
-
     QLabel::paintEvent(event);
-
+    display_next_frame();
 }
 

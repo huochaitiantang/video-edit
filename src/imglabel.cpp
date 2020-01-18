@@ -17,6 +17,8 @@ ImgLabel::~ImgLabel(){
 
 
 void ImgLabel::set_movie(std::string path){
+    clear_movie();
+
     this->movie = new Movie();
     this->movie->init(path);
 
@@ -56,7 +58,8 @@ bool ImgLabel::display_next_frame(){
         this->setPixmap(QPixmap::fromImage(*(this->image)));
 
         int ind = movie->get_video_frame_index();
-        this->info->setText(QString("frame index: %1").arg(ind));
+        double stamp = movie->get_video_frame_timestamp();
+        this->info->setText(QString("frame index: %1, stamp: %2 s").arg(ind).arg(stamp));
         return true;
     }
     else return false;

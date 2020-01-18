@@ -38,12 +38,9 @@ MainWindow::~MainWindow()
 void MainWindow::on_open_movie_clicked()
 {
     // parent, caption, default dir, filter
-    QString qpath = QFileDialog::getOpenFileName(this, tr("Chose a Movie"), "", tr("Movie (*.mp4 *.mkv *.avi)"));
+    QString qpath = QFileDialog::getOpenFileName(this, tr("Chose a Movie"), "../", tr("Movie (*.mp4 *.mkv *.avi)"));
     if(qpath.isEmpty()) return;
-
-    imglabel->clear_movie();
     imglabel->set_movie(qpath.toStdString());
-
 }
 
 

@@ -23,7 +23,7 @@ class Movie
 private:
     std::string movie_name = "";
     int height,width;
-    double fps;
+    AVRational fps, timebase;
     int video_frame_index;
     bool ret_packet = false;
 
@@ -52,7 +52,6 @@ private:
     void write_rgb_frame();
 
 
-
 public:
     Movie();
     ~Movie();
@@ -64,6 +63,7 @@ public:
     int get_height();
     int get_video_frame_index();
     std::string get_movie_name();
+    double get_video_frame_timestamp();
 
 };
 

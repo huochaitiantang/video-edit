@@ -59,6 +59,8 @@ void Movie::init(std::string path)
     if(video_codec_parameters){
         height = video_codec_parameters->height;
         width = video_codec_parameters->width;
+        fps = format_ctx->streams[video_stream_index]->avg_frame_rate;
+        timebase = format_ctx->streams[video_stream_index]->time_base;
 
         // finds the registered decoder for a codec ID
         video_codec = avcodec_find_decoder(video_codec_parameters->codec_id);
@@ -73,6 +75,11 @@ void Movie::init(std::string path)
 
         // Initialize the AVCodecContext to use the given AVCodec.
         assert(avcodec_open2(video_codec_ctx, video_codec, NULL) >= 0);
+
+        std::cout << "Video init: path=" << movie_name <<
+                     " fps=" << fps.num << "/" << fps.den <<
+                     " timebase=" << timebase.num << "/" << timebase.den <<
+                     " height=" << height << " width=" << width << std::endl;
     }
 
     // init the contex, codec of audio
@@ -81,7 +88,7 @@ void Movie::init(std::string path)
         audio_codec_ctx = avcodec_alloc_context3(video_codec);
 
     }
-    std::cout << "Movie Init" << std::endl;
+
     return;
 }
 
@@ -128,6 +135,8 @@ bool Movie::next_video_frame(){
     }
 }
 
+// av_seek_frame
+
 
 void Movie::init_rgb_frame(int h, int w){
     rgb_frame = av_frame_alloc();
@@ -156,10 +165,10 @@ void Movie::write_rgb_frame(){
     sws_scale(sws_context, video_frame->data, video_frame->linesize, 0,
               video_frame->height, rgb_frame->data, rgb_frame->linesize);
 
-    std::cout << "After conversion: linesize: " << rgb_frame->linesize[0] <<
-            " width=" << rgb_frame->width <<
-            " height=" << rgb_frame->height <<
-            " format=" << rgb_frame->format << std::endl;
+//    std::cout << "After conversion: linesize: " << rgb_frame->linesize[0] <<
+//            " width=" << rgb_frame->width <<
+//            " height=" << rgb_frame->height <<
+//            " format=" << rgb_frame->format << std::endl;
     return;
 }
 
@@ -171,12 +180,12 @@ void Movie::write_qimage(QImage * img, int top_h, int top_w){
     int h, w, base;
     unsigned char * line_data;
     for(h = 0; h < rgb_frame->height; h++){
-        line_data = img->scanLine(h);
+        line_data = img->scanLine(h + top_h);
         for(w = 0; w < rgb_frame->width; w++){
             base = h * rgb_frame->linesize[0] + w * 3;
-            line_data[w * 3 + 0] = rgb_frame->data[0][base + 0];
-            line_data[w * 3 + 1] = rgb_frame->data[0][base + 1];
-            line_data[w * 3 + 2] = rgb_frame->data[0][base + 2];
+            line_data[(top_w + w) * 3 + 0] = rgb_frame->data[0][base + 0];
+            line_data[(top_w + w) * 3 + 1] = rgb_frame->data[0][base + 1];
+            line_data[(top_w + w) * 3 + 2] = rgb_frame->data[0][base + 2];
         }
     }
     return;
@@ -196,4 +205,9 @@ int Movie::get_video_frame_index(){
 
 std::string Movie::get_movie_name(){
     return movie_name;
+}
+
+double Movie::get_video_frame_timestamp(){
+    double stamp = (double)video_frame->pts * (double)timebase.num / (double)timebase.den;
+    return stamp;
 }

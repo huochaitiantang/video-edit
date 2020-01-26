@@ -26,6 +26,7 @@ private:
     AVRational fps, timebase;
     int video_frame_index;
     bool ret_packet = false;
+    double duration;
 
     int video_stream_index, audio_stream_index;
     AVFormatContext * format_ctx;
@@ -64,6 +65,9 @@ public:
     int get_video_frame_index();
     std::string get_movie_name();
     double get_video_frame_timestamp();
+    double get_video_duration();
+    double get_fps();
+    void seek_frame(int target_second);
 
 };
 

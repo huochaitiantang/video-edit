@@ -36,6 +36,7 @@ void Movie::init(std::string path)
     movie_name = path;
     assert(avformat_open_input(&format_ctx, path.c_str(), NULL, NULL) == 0);
     assert(avformat_find_stream_info(format_ctx,  NULL) >= 0);
+    duration = (double)format_ctx->duration / 1000000; // us -> s
 
     // find the video codec parameters and audio codec parameters
     for(int i = 0; i < format_ctx->nb_streams; i++)
@@ -79,6 +80,7 @@ void Movie::init(std::string path)
         std::cout << "Video init: path=" << movie_name <<
                      " fps=" << fps.num << "/" << fps.den <<
                      " timebase=" << timebase.num << "/" << timebase.den <<
+                     " duration=" << duration <<
                      " height=" << height << " width=" << width << std::endl;
     }
 
@@ -86,7 +88,6 @@ void Movie::init(std::string path)
     if(audio_codec_parameters){
         audio_codec = avcodec_find_decoder(audio_codec_parameters->codec_id);
         audio_codec_ctx = avcodec_alloc_context3(video_codec);
-
     }
 
     return;
@@ -123,7 +124,6 @@ bool Movie::next_video_frame(){
             }
             // frame that we want, write to the rgb frame buff
             else{
-                video_frame_index = video_codec_ctx->frame_number;
                 write_rgb_frame();
                 return true;
             }
@@ -135,7 +135,15 @@ bool Movie::next_video_frame(){
     }
 }
 
-// av_seek_frame
+void Movie::seek_frame(int target_second){
+    // second = timebase * pts, av_q2d: avrational to double
+    int64_t seek_time_pts = (int64_t)target_second / av_q2d(timebase);
+    std::cout << "seek second: " << target_second << " s [" << seek_time_pts
+              << "/" << format_ctx[video_stream_index].duration << "]" << std::endl;
+
+    assert(av_seek_frame(format_ctx, video_stream_index, seek_time_pts, AVSEEK_FLAG_BACKWARD) >= 0);
+    ret_packet = false;
+}
 
 
 void Movie::init_rgb_frame(int h, int w){
@@ -200,6 +208,7 @@ int Movie::get_height(){
 }
 
 int Movie::get_video_frame_index(){
+    video_frame_index = (int)(av_q2d(timebase) * video_frame->pts * av_q2d(fps));
     return video_frame_index;
 }
 
@@ -208,6 +217,15 @@ std::string Movie::get_movie_name(){
 }
 
 double Movie::get_video_frame_timestamp(){
-    double stamp = (double)video_frame->pts * (double)timebase.num / (double)timebase.den;
-    return stamp;
+    //av_q2d: avrational to double
+    double stamp = (double)video_frame->pts * av_q2d(timebase);
+    return stamp; // second
+}
+
+double Movie::get_video_duration(){
+    return duration; // second
+}
+
+double Movie::get_fps(){
+    return (double)fps.num / (double)fps.den;
 }

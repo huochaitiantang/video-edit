@@ -15,9 +15,9 @@ MainWindow::MainWindow(QWidget *parent)
 {
 
     ui->setupUi(this);
-    imglabel = new ImgLabel(this, ui->img_label_info);
+    imglabel = new ImgLabel(this, ui->img_label_info, ui->movie_progress);
     this->adjust_size();
-    ui->open_movie->setGeometry(20, 60 + 360, 540, 20);
+    ui->open_movie->setGeometry(20, 80 + 360, 540, 20);
 
     //for debug
     //std::string path = "E:/QT/videos/S2-P5-160912.mp4";

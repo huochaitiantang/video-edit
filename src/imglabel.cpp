@@ -1,10 +1,12 @@
 #include "imglabel.h"
 #include <iostream>
 
-ImgLabel::ImgLabel(QWidget *parent, QLabel *info) : QLabel(parent){
+ImgLabel::ImgLabel(QWidget *parent, QLabel *info, QSlider *progress) : QLabel(parent){
     this->info = info;
+    this->progress = progress;
     this->setGeometry(20, 40, this->W, this->H);
-    this->info->setGeometry(20, 40 + this->H, this->W, 20);
+    this->progress->setGeometry(20, 40 + this->H, this->W, 20);
+    this->info->setGeometry(20, 60 + this->H, this->W, 20);
 }
 
 
@@ -40,15 +42,26 @@ void ImgLabel::set_movie(std::string path){
 
     this->image = new QImage(W, H, QImage::Format_RGB888);
     this->movie->init_rgb_frame(image_h, image_w);
+
+    // init the progress slider
+    int duration = (int)movie->get_video_duration();
+    this->progress->setMinimum(0);
+    this->progress->setMaximum(duration);
+    std::cout << "Slider Max: " << duration << std::endl;
+    // sliderPressed(), sliderReleased(), sliderMoved(int), valueChanged(int)
+    connect(this->progress, SIGNAL(sliderPressed()), this, SLOT(set_progress_start()));
+    connect(this->progress, SIGNAL(sliderReleased()), this, SLOT(set_progress_end()));
+
 }
 
 void ImgLabel::clear_movie(){
     if(this->movie){
         delete this->movie;
         this->movie = NULL;
+        this->progress->setValue(0);
+        disconnect(this->progress);
     }
 }
-
 
 bool ImgLabel::display_next_frame(){
     if((this->movie) && (this->movie->next_video_frame())){
@@ -57,35 +70,52 @@ bool ImgLabel::display_next_frame(){
         this->movie->write_qimage(image, top_h, top_w);
         this->setPixmap(QPixmap::fromImage(*(this->image)));
 
-        int ind = movie->get_video_frame_index();
-        double stamp = movie->get_video_frame_timestamp();
-        this->info->setText(QString("frame index: %1, stamp: %2 s").arg(ind).arg(stamp));
+        format_progress();
         return true;
     }
     else return false;
 }
 
+std::string ImgLabel::format_time(double second){
+    int int_second = (int)second;
+    int h = int_second / 3600;
+    int m = (int_second % 3600) / 60;
+    int s = int_second % 60;
+    int ms = (int)((second - int_second) * 100);
 
-void ImgLabel::getRelativeXY(int px, int py, int * x, int * y){
-    *x = px - 20;
-    *y = py - 40;
-    if( *x < 0 ) *x = 0;
-    if( *y < 0 ) *y = 0;
-    if( *x >= this->W) *x = this->W - 1;
-    if( *y >= this->H) *y = this->H - 1;
+    char ss[16];
+    assert(h < 100);
+    sprintf(ss, "%02d:%02d:%02d.%02d", h, m, s, ms);
+    std::string str = std::string(ss);
+    return str;
+}
+
+void ImgLabel::format_progress(){
+    // display the progress info
+    int ind = movie->get_video_frame_index();
+    double stamp = movie->get_video_frame_timestamp();
+    double duration = movie->get_video_duration();
+
+    this->info->setText(QString::fromStdString(format_time(stamp)) + " / " +
+                        QString::fromStdString(format_time(duration)) + " " +
+                        QString("Frame[%1]").arg(ind));
+
+    // move the progress slider
+    this->progress->setValue((int)stamp);
+}
+
+void ImgLabel::set_progress_start(){
+    display_lock = true;
+}
+
+void ImgLabel::set_progress_end(){
+    int target_second = this->progress->value();
+    this->movie->seek_frame(target_second);
+    display_next_frame();
+    display_lock = false;
 }
 
 void ImgLabel::mouseMoveEvent(QMouseEvent *event){
-    /*
-    int abs_x = event->x();
-    int abs_y = event->y();
-    int x,y;
-    getRelativeXY(abs_x, abs_y, &x, &y);
-    char ss[100];
-    sprintf(ss, "x=%d, y=%d", x, y);
-    QString qss(ss);
-    this->info->setText(qss);
-    */
     return;
 }
 
@@ -99,6 +129,7 @@ void ImgLabel::mouseReleaseEvent(QMouseEvent *event){
 
 void ImgLabel::paintEvent(QPaintEvent *event){
     QLabel::paintEvent(event);
-    display_next_frame();
+    if(!display_lock){
+        display_next_frame();
+    }
 }
-

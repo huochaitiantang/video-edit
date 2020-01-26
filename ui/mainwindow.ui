@@ -40,6 +40,19 @@
      <string>Open a Movie</string>
     </property>
    </widget>
+   <widget class="QSlider" name="movie_progress">
+    <property name="geometry">
+     <rect>
+      <x>40</x>
+      <y>310</y>
+      <width>160</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="orientation">
+     <enum>Qt::Horizontal</enum>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">

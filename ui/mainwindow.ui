@@ -24,7 +24,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>Info</string>
+     <string>00:00:00/00:00:00</string>
     </property>
    </widget>
    <widget class="QPushButton" name="open_movie">
@@ -51,6 +51,19 @@
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="control">
+    <property name="geometry">
+     <rect>
+      <x>220</x>
+      <y>350</y>
+      <width>75</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Pause</string>
     </property>
    </widget>
   </widget>

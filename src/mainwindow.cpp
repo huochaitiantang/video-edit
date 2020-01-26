@@ -17,7 +17,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     imglabel = new ImgLabel(this, ui->img_label_info, ui->movie_progress);
     this->adjust_size();
-    ui->open_movie->setGeometry(20, 80 + 360, 540, 20);
+    ui->open_movie->setGeometry(20, 80 + 360, 270, 20);
+    ui->control->setGeometry(290, 80 + 360, 270, 20);
 
     //for debug
     //std::string path = "E:/QT/videos/S2-P5-160912.mp4";
@@ -43,4 +44,14 @@ void MainWindow::on_open_movie_clicked()
     imglabel->set_movie(qpath.toStdString());
 }
 
+void MainWindow::on_control_clicked(){
+    if(ui->control->text() == "Play"){
+        imglabel->play();
+        ui->control->setText("Pause");
+    }
+    else{
+        imglabel->pause();
+        ui->control->setText("Play");
+    }
+}
 

@@ -26,6 +26,7 @@ private:
 
 private slots:
     void on_open_movie_clicked();
+    void on_control_clicked();
 
 
 };

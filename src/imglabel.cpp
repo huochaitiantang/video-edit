@@ -1,5 +1,7 @@
 #include "imglabel.h"
 #include <iostream>
+#include<sys/timeb.h>
+#include<windows.h>
 
 ImgLabel::ImgLabel(QWidget *parent, QLabel *info, QSlider *progress) : QLabel(parent){
     this->info = info;
@@ -17,6 +19,25 @@ ImgLabel::~ImgLabel(){
     delete movie;
 }
 
+double ImgLabel::get_system_time(){
+    timeb t;
+    ftime(&t);
+    return (double)(t.time * 1000 + t.millitm) / 1000.0;
+}
+
+void ImgLabel::sysnc_time(){
+    double system_cur_time = get_system_time();
+    double movie_cur_time= this->movie->get_video_frame_timestamp();
+
+    double dt_system = system_cur_time - system_anchor_time;
+    double dt_movie = movie_cur_time - movie_anchor_time;
+    double dt_sleep = dt_movie - dt_system;
+    dt_sleep = dt_sleep < 0 ? 0 : dt_sleep;
+
+    std::cout << "dt_system:" << dt_system << " dt_movie:" <<
+                 dt_movie << " dt_sleep:" << dt_sleep << std::endl;
+    Sleep(dt_sleep * 1000);
+}
 
 void ImgLabel::set_movie(std::string path){
     clear_movie();
@@ -29,7 +50,8 @@ void ImgLabel::set_movie(std::string path){
 
     double ratio_h = (double)H / h;
     double ratio_w = (double)W / w;
-    double ratio = std::min(ratio_h, ratio_w);
+    //double ratio = std::min(ratio_h, ratio_w);
+    double ratio = ratio_h > ratio_w ? ratio_w : ratio_h;
 
     this->image_h = (int)(h * ratio);
     this->image_w = (int)(w * ratio);
@@ -47,11 +69,16 @@ void ImgLabel::set_movie(std::string path){
     int duration = (int)movie->get_video_duration();
     this->progress->setMinimum(0);
     this->progress->setMaximum(duration);
-    std::cout << "Slider Max: " << duration << std::endl;
+    //std::cout << "Slider Max: " << duration << std::endl;
+
     // sliderPressed(), sliderReleased(), sliderMoved(int), valueChanged(int)
     connect(this->progress, SIGNAL(sliderPressed()), this, SLOT(set_progress_start()));
     connect(this->progress, SIGNAL(sliderReleased()), this, SLOT(set_progress_end()));
 
+    // control the play speed
+    system_anchor_time = get_system_time();
+    display_next_frame();
+    movie_anchor_time = this->movie->get_video_frame_timestamp();
 }
 
 void ImgLabel::clear_movie(){
@@ -111,8 +138,23 @@ void ImgLabel::set_progress_start(){
 void ImgLabel::set_progress_end(){
     int target_second = this->progress->value();
     this->movie->seek_frame(target_second);
-    display_next_frame();
+    //system_anchor_time = get_system_time();
+    //movie_anchor_time = this->movie->get_video_frame_timestamp();
+    //display_next_frame();
+    this->update();
     display_lock = false;
+}
+
+void ImgLabel::play(){
+    on_play = true;
+    system_anchor_time = get_system_time();
+    movie_anchor_time = this->movie->get_video_frame_timestamp();
+    this->update();
+}
+
+void ImgLabel::pause(){
+    on_play = false;
+    this->update();
 }
 
 void ImgLabel::mouseMoveEvent(QMouseEvent *event){
@@ -129,7 +171,8 @@ void ImgLabel::mouseReleaseEvent(QMouseEvent *event){
 
 void ImgLabel::paintEvent(QPaintEvent *event){
     QLabel::paintEvent(event);
-    if(!display_lock){
+    if((!display_lock) && on_play){
+        //sysnc_time();
         display_next_frame();
     }
 }

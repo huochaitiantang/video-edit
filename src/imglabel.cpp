@@ -92,8 +92,6 @@ void ImgLabel::clear_movie(){
 
 bool ImgLabel::display_next_frame(){
     if((this->movie) && (this->movie->next_video_frame())){
-
-        // TODO: still a little memory leak
         this->movie->write_qimage(image, top_h, top_w);
         this->setPixmap(QPixmap::fromImage(*(this->image)));
 

@@ -20,8 +20,15 @@ Movie::~Movie()
 {
     avformat_close_input(&format_ctx);
     avformat_free_context(format_ctx);
+
+    av_packet_unref(video_packet);
+    av_packet_unref(audio_packet);
     av_packet_free(&video_packet);
     av_packet_free(&audio_packet);
+
+    av_frame_unref(video_frame);
+    av_frame_unref(audio_frame);
+    av_frame_unref(rgb_frame);
     av_frame_free(&video_frame);
     av_frame_free(&audio_frame);
     av_frame_free(&rgb_frame);
@@ -95,17 +102,17 @@ void Movie::init(std::string path)
 
 // get the next video packet to the video_packet
 bool Movie::next_video_packet(){
-    bool ret = false;
     while(av_read_frame(format_ctx, video_packet) >= 0){
         if(video_packet->stream_index == video_stream_index){
-            ret = true;
-            break;
+            assert(avcodec_send_packet(video_codec_ctx, video_packet) >= 0);
+            av_packet_unref(video_packet);
+            return true;
+        }
+        else{
+            av_packet_unref(video_packet);
         }
     }
-    if(ret){
-        assert(avcodec_send_packet(video_codec_ctx, video_packet) >= 0);
-    }
-    return ret;
+    return false;
 }
 
 
@@ -116,10 +123,12 @@ bool Movie::next_video_frame(){
             ret_packet = next_video_packet();
         }
         if(ret_packet){
+            av_frame_unref(video_frame);
             int ret = avcodec_receive_frame(video_codec_ctx, video_frame);
             // if current packet not satisfied, get net packet
             if(ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF){
                 ret_packet = false;
+
                 continue;
             }
             // frame that we want, write to the rgb frame buff

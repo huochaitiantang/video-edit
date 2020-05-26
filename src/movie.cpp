@@ -137,9 +137,9 @@ bool Movie::next_video_frame(){
             // frame that we want, write to the rgb frame buff
             else{
                 current_pts = video_frame->pts;
-                if(video_frame->key_frame){
-                    std::cout << "Frame-" << get_video_frame_index() << " IS key frame" << std::endl;
-                }
+                //if(video_frame->key_frame){
+                //    std::cout << "Frame-" << get_video_frame_index() << " IS key frame" << std::endl;
+                //}
                 write_rgb_frame();
                 return true;
             }
@@ -155,17 +155,14 @@ void Movie::seek_frame(int64_t target_frame){
     // frame_index = timebase * pts * fps, av_q2d: avrational to double
     // second = pts * timebase = frame_index / fps
     int64_t seek_time_pts = (int64_t)(target_frame * pts_per_frame);
-    int64_t min_pts = seek_time_pts - 10 * pts_per_frame;
-    int64_t max_pts = seek_time_pts + 10 * pts_per_frame;
+    av_seek_frame(format_ctx, video_stream_index, seek_time_pts, AVSEEK_FLAG_BACKWARD);
 
-    std::cout << "seek frame:" << target_frame << "/" << get_frame_count()
-              << " seek pts:" << seek_time_pts << "/" << get_max_pts() << std::endl;
-
-    //avformat_seek_file(format_ctx, video_stream_index, min_pts, seek_time_pts, max_pts, AVSEEK_FLAG_BACKWARD);
-    avformat_seek_file(format_ctx, video_stream_index, min_pts, seek_time_pts, max_pts, AVSEEK_FLAG_BACKWARD);
+    //std::cout << "seek frame:" << target_frame << "/" << get_frame_count()
+    //          << " seek pts:" << seek_time_pts << "/" << get_max_pts() << std::endl;
 
     ret_packet = false;
-    avformat_flush(format_ctx);
+    avcodec_flush_buffers(video_codec_ctx);
+    return;
 }
 
 

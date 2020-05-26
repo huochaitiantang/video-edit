@@ -107,28 +107,31 @@ int64_t ImgLabel::seek_almost(int64_t target_frame){
     this->movie->seek_frame(target_frame);
     display_next_frame();
     int ind = movie->get_video_frame_index();
-    while((abs(target_frame - ind) > 300) && display_next_frame()){
-        ind = movie->get_video_frame_index();
-    }
+    assert(abs(target_frame - ind) <= 300);
     return ind;
 }
 
+// accurate jump, may cost much
 void ImgLabel::jump_to_frame(int64_t target_frame){
     int tmp_target_frame = target_frame;
     int ind = seek_almost(tmp_target_frame);
 
     // found key frame with the bigger frame index
     while(ind > target_frame){
+        std::cout << "Warning: Seek Key Frame = " << ind << " > Target Frame:" << target_frame << std::endl;
         tmp_target_frame = tmp_target_frame < 50 ? 0 : tmp_target_frame - 50;
-        std::cout << "jump-big target_frame:" << target_frame << " read_frame:" << ind << std::endl;
         ind = seek_almost(tmp_target_frame);
     }
 
     // found key frame with the smaller frame index
     while((ind < target_frame) && (display_next_frame())){
         ind = movie->get_video_frame_index();
-        std::cout << "jump-small target_frame:" << target_frame << " read_frame:" << ind << std::endl;
     }
+    if(ind < target_frame){
+        std::cout << "Warning: Real Max Frame Index = " << ind << std::endl;
+    }
+    std::cout << "Seek Frame: Target=" << target_frame << ", Real=" << ind << std::endl;
+
     return;
 }
 
@@ -138,7 +141,8 @@ void ImgLabel::set_progress_start(){
 
 void ImgLabel::set_progress_end(){
     int64_t target_frame = this->progress->value();
-    jump_to_frame(target_frame);
+    //jump_to_frame(target_frame);
+    seek_almost(target_frame);
     display_lock = false;
 }
 
@@ -174,7 +178,7 @@ int ImgLabel::get_W(){
 }
 
 void ImgLabel::set_frame(int frame_index){
-    if(frame_index < 0 || frame_index >= movie_frame_count) return;
+    if(frame_index < 0 || frame_index > movie_frame_count) return;
     display_lock = true;
     jump_to_frame(frame_index);
     display_lock = false;

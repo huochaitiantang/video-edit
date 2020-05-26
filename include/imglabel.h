@@ -25,25 +25,30 @@ class ImgLabel : public QLabel
         QLabel * info;
         Movie* movie = NULL;
         QSlider * progress;
-        int W = 540;
+        int W = 720;
         int H = 360;
         int image_h, image_w, top_h, top_w;
         bool display_lock = false;
         bool on_play = true;
         double system_anchor_time;
         double movie_anchor_time;
+        double movie_duration;
+        double movie_fps;
+        int movie_frame_count;
+        double play_times = 1.0;
 
 
         bool display_next_frame();
         void clear_movie();
-        void format_progress();
         std::string format_time(double second);
         double get_system_time();
-        void sysnc_time();
+        int64_t seek_almost(int64_t target_frame);
+        void jump_to_frame(int64_t target_frame);
 
     private slots:
         void set_progress_start();
         void set_progress_end();
+        void progress_change();
 
     public:
         ImgLabel(QWidget *parent, QLabel *info, QSlider *progress);
@@ -51,6 +56,10 @@ class ImgLabel : public QLabel
         void set_movie(std::string path);
         void play();
         void pause();
+        void set_play_times(double x);
+        void set_frame(int frame_index);
+        int get_W();
+        int get_H();
 
     protected:
         void mouseMoveEvent(QMouseEvent *event);

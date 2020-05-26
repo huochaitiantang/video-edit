@@ -6,9 +6,9 @@
 ImgLabel::ImgLabel(QWidget *parent, QLabel *info, QSlider *progress) : QLabel(parent){
     this->info = info;
     this->progress = progress;
-    this->setGeometry(20, 40, this->W, this->H);
-    this->progress->setGeometry(20, 40 + this->H, this->W, 20);
-    this->info->setGeometry(20, 60 + this->H, this->W, 20);
+    this->setGeometry(10, 30, this->W, this->H);
+    this->info->setGeometry(10, 30 + this->H, this->W, 20);
+    this->progress->setGeometry(10, 50 + this->H, this->W, 20);
 }
 
 
@@ -23,20 +23,6 @@ double ImgLabel::get_system_time(){
     timeb t;
     ftime(&t);
     return (double)(t.time * 1000 + t.millitm) / 1000.0;
-}
-
-void ImgLabel::sysnc_time(){
-    double system_cur_time = get_system_time();
-    double movie_cur_time= this->movie->get_video_frame_timestamp();
-
-    double dt_system = system_cur_time - system_anchor_time;
-    double dt_movie = movie_cur_time - movie_anchor_time;
-    double dt_sleep = dt_movie - dt_system;
-    dt_sleep = dt_sleep < 0 ? 0 : dt_sleep;
-
-    std::cout << "dt_system:" << dt_system << " dt_movie:" <<
-                 dt_movie << " dt_sleep:" << dt_sleep << std::endl;
-    Sleep(dt_sleep * 1000);
 }
 
 void ImgLabel::set_movie(std::string path){
@@ -66,19 +52,19 @@ void ImgLabel::set_movie(std::string path){
     this->movie->init_rgb_frame(image_h, image_w);
 
     // init the progress slider
-    int duration = (int)movie->get_video_duration();
+    movie_duration = movie->get_video_duration();
+    movie_fps = movie->get_fps();
+    movie_frame_count = movie->get_frame_count();
     this->progress->setMinimum(0);
-    this->progress->setMaximum(duration);
-    //std::cout << "Slider Max: " << duration << std::endl;
+    this->progress->setMaximum(movie_frame_count);
+    std::cout << "Slider Max: " << movie_frame_count << std::endl;
 
     // sliderPressed(), sliderReleased(), sliderMoved(int), valueChanged(int)
     connect(this->progress, SIGNAL(sliderPressed()), this, SLOT(set_progress_start()));
     connect(this->progress, SIGNAL(sliderReleased()), this, SLOT(set_progress_end()));
+    connect(this->progress, SIGNAL(valueChanged(int)), this, SLOT(progress_change()));
 
-    // control the play speed
-    system_anchor_time = get_system_time();
     display_next_frame();
-    movie_anchor_time = this->movie->get_video_frame_timestamp();
 }
 
 void ImgLabel::clear_movie(){
@@ -95,7 +81,8 @@ bool ImgLabel::display_next_frame(){
         this->movie->write_qimage(image, top_h, top_w);
         this->setPixmap(QPixmap::fromImage(*(this->image)));
 
-        format_progress();
+        int ind = this->movie->get_video_frame_index();
+        this->progress->setValue(ind);
         return true;
     }
     else return false;
@@ -115,18 +102,34 @@ std::string ImgLabel::format_time(double second){
     return str;
 }
 
-void ImgLabel::format_progress(){
-    // display the progress info
+// seek the key frame that near the target frame index
+int64_t ImgLabel::seek_almost(int64_t target_frame){
+    this->movie->seek_frame(target_frame);
+    display_next_frame();
     int ind = movie->get_video_frame_index();
-    double stamp = movie->get_video_frame_timestamp();
-    double duration = movie->get_video_duration();
+    while((abs(target_frame - ind) > 300) && display_next_frame()){
+        ind = movie->get_video_frame_index();
+    }
+    return ind;
+}
 
-    this->info->setText(QString::fromStdString(format_time(stamp)) + " / " +
-                        QString::fromStdString(format_time(duration)) + " " +
-                        QString("Frame[%1]").arg(ind));
+void ImgLabel::jump_to_frame(int64_t target_frame){
+    int tmp_target_frame = target_frame;
+    int ind = seek_almost(tmp_target_frame);
 
-    // move the progress slider
-    this->progress->setValue((int)stamp);
+    // found key frame with the bigger frame index
+    while(ind > target_frame){
+        tmp_target_frame = tmp_target_frame < 50 ? 0 : tmp_target_frame - 50;
+        std::cout << "jump-big target_frame:" << target_frame << " read_frame:" << ind << std::endl;
+        ind = seek_almost(tmp_target_frame);
+    }
+
+    // found key frame with the smaller frame index
+    while((ind < target_frame) && (display_next_frame())){
+        ind = movie->get_video_frame_index();
+        std::cout << "jump-small target_frame:" << target_frame << " read_frame:" << ind << std::endl;
+    }
+    return;
 }
 
 void ImgLabel::set_progress_start(){
@@ -134,25 +137,47 @@ void ImgLabel::set_progress_start(){
 }
 
 void ImgLabel::set_progress_end(){
-    int target_second = this->progress->value();
-    this->movie->seek_frame(target_second);
-    //system_anchor_time = get_system_time();
-    //movie_anchor_time = this->movie->get_video_frame_timestamp();
-    //display_next_frame();
-    this->update();
+    int64_t target_frame = this->progress->value();
+    jump_to_frame(target_frame);
     display_lock = false;
+}
+
+void ImgLabel::progress_change(){
+    int64_t target_frame = this->progress->value();
+    double show_stamp = (double)target_frame / movie_fps;
+    this->info->setText(QString::fromStdString(format_time(show_stamp)) + " / " +
+                        QString::fromStdString(format_time(movie_duration)) + " " +
+                        QString("Frame[%1 / %2]").arg(target_frame).arg(movie_frame_count));
+    return;
 }
 
 void ImgLabel::play(){
     on_play = true;
-    system_anchor_time = get_system_time();
-    movie_anchor_time = this->movie->get_video_frame_timestamp();
     this->update();
 }
 
 void ImgLabel::pause(){
     on_play = false;
     this->update();
+}
+
+void ImgLabel::set_play_times(double x){
+    this->play_times = x;
+}
+
+int ImgLabel::get_H(){
+    return this->H;
+}
+
+int ImgLabel::get_W(){
+    return this->W;
+}
+
+void ImgLabel::set_frame(int frame_index){
+    if(frame_index < 0 || frame_index >= movie_frame_count) return;
+    display_lock = true;
+    jump_to_frame(frame_index);
+    display_lock = false;
 }
 
 void ImgLabel::mouseMoveEvent(QMouseEvent *event){
@@ -169,8 +194,15 @@ void ImgLabel::mouseReleaseEvent(QMouseEvent *event){
 
 void ImgLabel::paintEvent(QPaintEvent *event){
     QLabel::paintEvent(event);
-    if((!display_lock) && on_play){
-        //sysnc_time();
+    if(!display_lock && on_play){
+        timeb t1, t2;
+        ftime(&t1);
         display_next_frame();
+        ftime(&t2);
+        double dt = (double)(t2.time - t1.time) * 1000 + (double)(t2.millitm - t1.millitm);
+        double sleep_dt = 900.0 / movie_fps / play_times - dt;
+        sleep_dt = sleep_dt < 0 ? 0 : sleep_dt;
+        Sleep(sleep_dt);
     }
+
 }

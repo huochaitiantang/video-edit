@@ -27,6 +27,8 @@ private:
     int video_frame_index;
     bool ret_packet = false;
     double duration;
+    int64_t current_pts;
+    int64_t pts_per_frame;
 
     int video_stream_index, audio_stream_index;
     AVFormatContext * format_ctx;
@@ -67,7 +69,9 @@ public:
     double get_video_frame_timestamp();
     double get_video_duration();
     double get_fps();
-    void seek_frame(int target_second);
+    int get_frame_count();
+    int64_t get_max_pts();
+    void seek_frame(int64_t target_frame);
 
 };
 

@@ -1,5 +1,6 @@
 #include<assert.h>
 #include<iostream>
+#include<algorithm>
 #include "movie.h"
 
 
@@ -69,6 +70,8 @@ void Movie::init(std::string path)
         width = video_codec_parameters->width;
         fps = format_ctx->streams[video_stream_index]->avg_frame_rate;
         timebase = format_ctx->streams[video_stream_index]->time_base;
+        current_pts = -1;
+        pts_per_frame = timebase.den / timebase.num / fps.num * fps.den;
 
         // finds the registered decoder for a codec ID
         video_codec = avcodec_find_decoder(video_codec_parameters->codec_id);
@@ -87,6 +90,7 @@ void Movie::init(std::string path)
         std::cout << "Video init: path=" << movie_name <<
                      " fps=" << fps.num << "/" << fps.den <<
                      " timebase=" << timebase.num << "/" << timebase.den <<
+                     " pts_per_frame=" << pts_per_frame <<
                      " duration=" << duration <<
                      " height=" << height << " width=" << width << std::endl;
     }
@@ -128,11 +132,14 @@ bool Movie::next_video_frame(){
             // if current packet not satisfied, get net packet
             if(ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF){
                 ret_packet = false;
-
                 continue;
             }
             // frame that we want, write to the rgb frame buff
             else{
+                current_pts = video_frame->pts;
+                if(video_frame->key_frame){
+                    std::cout << "Frame-" << get_video_frame_index() << " IS key frame" << std::endl;
+                }
                 write_rgb_frame();
                 return true;
             }
@@ -144,14 +151,21 @@ bool Movie::next_video_frame(){
     }
 }
 
-void Movie::seek_frame(int target_second){
-    // second = timebase * pts, av_q2d: avrational to double
-    int64_t seek_time_pts = (int64_t)target_second / av_q2d(timebase);
-    std::cout << "seek second: " << target_second << " s [" << seek_time_pts
-              << "/" << format_ctx[video_stream_index].duration << "]" << std::endl;
+void Movie::seek_frame(int64_t target_frame){
+    // frame_index = timebase * pts * fps, av_q2d: avrational to double
+    // second = pts * timebase = frame_index / fps
+    int64_t seek_time_pts = (int64_t)(target_frame * pts_per_frame);
+    int64_t min_pts = seek_time_pts - 10 * pts_per_frame;
+    int64_t max_pts = seek_time_pts + 10 * pts_per_frame;
 
-    assert(av_seek_frame(format_ctx, video_stream_index, seek_time_pts, AVSEEK_FLAG_BACKWARD) >= 0);
+    std::cout << "seek frame:" << target_frame << "/" << get_frame_count()
+              << " seek pts:" << seek_time_pts << "/" << get_max_pts() << std::endl;
+
+    //avformat_seek_file(format_ctx, video_stream_index, min_pts, seek_time_pts, max_pts, AVSEEK_FLAG_BACKWARD);
+    avformat_seek_file(format_ctx, video_stream_index, min_pts, seek_time_pts, max_pts, AVSEEK_FLAG_BACKWARD);
+
     ret_packet = false;
+    avformat_flush(format_ctx);
 }
 
 
@@ -217,7 +231,9 @@ int Movie::get_height(){
 }
 
 int Movie::get_video_frame_index(){
-    video_frame_index = (int)(av_q2d(timebase) * video_frame->pts * av_q2d(fps));
+    if(current_pts < 0) return -1;
+    // frame_index = timebase * pts * fps
+    video_frame_index = (int)(av_q2d(timebase) * current_pts * av_q2d(fps) + 0.5);
     return video_frame_index;
 }
 
@@ -227,7 +243,7 @@ std::string Movie::get_movie_name(){
 
 double Movie::get_video_frame_timestamp(){
     //av_q2d: avrational to double
-    double stamp = (double)video_frame->pts * av_q2d(timebase);
+    double stamp = (double)current_pts * av_q2d(timebase);
     return stamp; // second
 }
 
@@ -237,4 +253,13 @@ double Movie::get_video_duration(){
 
 double Movie::get_fps(){
     return (double)fps.num / (double)fps.den;
+}
+
+// is not accurate
+int Movie::get_frame_count(){
+    return (int)(duration * get_fps() + 0.5);
+}
+
+int64_t Movie::get_max_pts(){
+    return (int64_t)(get_frame_count() * pts_per_frame);
 }

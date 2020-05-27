@@ -32,6 +32,40 @@ MainWindow::MainWindow(QWidget *parent)
     ui->play_times->setCurrentIndex(0);
     connect(this->ui->play_times, SIGNAL(currentIndexChanged(int)), this, SLOT(play_times_changed()));
 
+    // fast forward
+    QButtonGroup * fast_forward_button_group = new QButtonGroup(this);
+    connect(fast_forward_button_group,SIGNAL(buttonClicked(int)), this, SLOT(fast_forward_clicked(int)));
+    int info_w = 100;
+
+    // fast forward for frame
+    QLabel* frame_fast_forward_info = new QLabel(this);
+    frame_fast_forward_info->setText("ControlFrame:");
+    frame_fast_forward_info->setGeometry(10, 100 + h, info_w, 20);
+    // add button
+    int avg_w = (w - info_w) / fast_forward_count;
+    for(int i = 0; i < fast_forward_count; i++){
+        QPushButton * btn = new QPushButton(this);
+        int val = fast_forward_cands[i];
+        QString ss = val > 0 ? QString("+%1").arg(val) : QString("%1").arg(val);
+        btn->setText(ss);
+        btn->setGeometry(info_w + avg_w * i, 100 + h, avg_w, 20);
+        fast_forward_button_group->addButton(btn, i);
+    }
+
+    // fast forward for second
+    QLabel* second_fast_forward_info = new QLabel(this);
+    second_fast_forward_info->setText("ControlSecond:");
+    second_fast_forward_info->setGeometry(10, 120 + h, info_w, 20);
+    // add button
+    for(int i = 0; i < fast_forward_count; i++){
+        QPushButton * btn = new QPushButton(this);
+        int val = fast_forward_cands[i];
+        QString ss = val > 0 ? QString("+%1").arg(val) : QString("%1").arg(val);
+        btn->setText(ss);
+        btn->setGeometry(info_w + avg_w * i, 120 + h, avg_w, 20);
+        fast_forward_button_group->addButton(btn, i + fast_forward_count);
+    }
+
     //for debug
     //std::string path = "E:/QT/videos/S2-P5-160912.mp4";
     //imglabel->set_movie(path);
@@ -77,5 +111,14 @@ void MainWindow::on_jump_frame_clicked(){
     QString val = ui->jump_frame_text->text();
     if(val.contains(QRegExp("^\\d+$"))){
         imglabel->set_frame(val.toInt());
+    }
+}
+
+void MainWindow::fast_forward_clicked(int index){
+    if(index < fast_forward_count){
+        this->imglabel->fast_forward_frame(fast_forward_cands[index]);
+    }
+    else{
+        this->imglabel->fast_forward_second((double)fast_forward_cands[index - fast_forward_count]);
     }
 }

@@ -43,7 +43,9 @@ class ImgLabel : public QLabel
         std::string format_time(double second);
         double get_system_time();
         int64_t seek_almost(int64_t target_frame);
-        void jump_to_frame(int64_t target_frame);
+        int jump_to_frame(int64_t target_frame);
+        int forward_until(int ind, int64_t target_frame);
+        void init_qimage(QImage * img, int H, int W);
 
     private slots:
         void set_progress_start();
@@ -60,6 +62,8 @@ class ImgLabel : public QLabel
         void set_frame(int frame_index);
         int get_W();
         int get_H();
+        void fast_forward_frame(int delta);
+        void fast_forward_second(double delta);
 
     protected:
         void mouseMoveEvent(QMouseEvent *event);

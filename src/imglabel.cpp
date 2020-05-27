@@ -25,6 +25,20 @@ double ImgLabel::get_system_time(){
     return (double)(t.time * 1000 + t.millitm) / 1000.0;
 }
 
+void ImgLabel::init_qimage(QImage * img, int H, int W){
+    int h, w, base;
+    unsigned char * line_data;
+    for(h = 0; h < H; h++){
+        line_data = img->scanLine(h);
+        for(w = 0; w < W; w++){
+            line_data[w * 3 + 0] = 53;
+            line_data[w * 3 + 1] = 53;
+            line_data[w * 3 + 2] = 53;
+        }
+    }
+    return;
+}
+
 void ImgLabel::set_movie(std::string path){
     clear_movie();
 
@@ -49,6 +63,7 @@ void ImgLabel::set_movie(std::string path){
     }
 
     this->image = new QImage(W, H, QImage::Format_RGB888);
+    init_qimage(this->image, H, W);
     this->movie->init_rgb_frame(image_h, image_w);
 
     // init the progress slider
@@ -111,8 +126,20 @@ int64_t ImgLabel::seek_almost(int64_t target_frame){
     return ind;
 }
 
+int ImgLabel::forward_until(int ind, int64_t target_frame){
+    assert(ind <= target_frame);
+    // found key frame with the smaller frame index
+    while((ind < target_frame) && (display_next_frame())){
+        ind = movie->get_video_frame_index();
+    }
+    if(ind < target_frame){
+        std::cout << "Warning: Real Max Frame Index = " << ind << std::endl;
+    }
+    return ind;
+}
+
 // accurate jump, may cost much
-void ImgLabel::jump_to_frame(int64_t target_frame){
+int ImgLabel::jump_to_frame(int64_t target_frame){
     int tmp_target_frame = target_frame;
     int ind = seek_almost(tmp_target_frame);
 
@@ -122,17 +149,9 @@ void ImgLabel::jump_to_frame(int64_t target_frame){
         tmp_target_frame = tmp_target_frame < 50 ? 0 : tmp_target_frame - 50;
         ind = seek_almost(tmp_target_frame);
     }
-
-    // found key frame with the smaller frame index
-    while((ind < target_frame) && (display_next_frame())){
-        ind = movie->get_video_frame_index();
-    }
-    if(ind < target_frame){
-        std::cout << "Warning: Real Max Frame Index = " << ind << std::endl;
-    }
+    ind = forward_until(ind, target_frame);
     std::cout << "Seek Frame: Target=" << target_frame << ", Real=" << ind << std::endl;
-
-    return;
+    return ind;
 }
 
 void ImgLabel::set_progress_start(){
@@ -182,6 +201,37 @@ void ImgLabel::set_frame(int frame_index){
     display_lock = true;
     jump_to_frame(frame_index);
     display_lock = false;
+}
+
+void ImgLabel::fast_forward_frame(int delta){
+    int ind = this->movie->get_video_frame_index();
+    int target_frame = ind + delta;
+    target_frame = target_frame < 0 ? 0 : target_frame;
+    target_frame = target_frame > movie_frame_count ? movie_frame_count : target_frame;
+    display_lock = true;
+
+    // frame and second is big, rough seek
+    if(abs(delta) > 200){
+        ind = seek_almost(target_frame);
+    }
+    // only forward, is fast
+    else if(delta > 0){
+        ind = forward_until(ind, target_frame);
+    }
+    // may cost much
+    else if(delta < 0){
+        ind = jump_to_frame(target_frame);
+    }
+    std::cout << "Fast Forward Frame" << delta <<": Target="
+              << target_frame << ", Real=" << ind << std::endl;
+    display_lock = false;
+    return;
+}
+
+void ImgLabel::fast_forward_second(double delta){
+    int64_t delta_frame = (int64_t)(delta * movie_fps + 0.5);
+    fast_forward_frame(delta_frame);
+    return;
 }
 
 void ImgLabel::mouseMoveEvent(QMouseEvent *event){

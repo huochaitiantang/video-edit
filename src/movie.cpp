@@ -7,14 +7,10 @@
 Movie::Movie()
 {
     format_ctx = avformat_alloc_context();
-    video_frame = av_frame_alloc();
-    audio_frame = av_frame_alloc();
-
-    video_packet = av_packet_alloc();
-    audio_packet = av_packet_alloc();
-
-    assert(format_ctx && video_frame && audio_frame &&
-           video_packet && audio_packet);
+    frame = av_frame_alloc();
+    rgb_frame = av_frame_alloc();
+    packet = av_packet_alloc();
+    assert(frame && rgb_frame && packet);
 }
 
 Movie::~Movie()
@@ -22,91 +18,212 @@ Movie::~Movie()
     avformat_close_input(&format_ctx);
     avformat_free_context(format_ctx);
 
-    av_packet_unref(video_packet);
-    av_packet_unref(audio_packet);
-    av_packet_free(&video_packet);
-    av_packet_free(&audio_packet);
-
-    av_frame_unref(video_frame);
-    av_frame_unref(audio_frame);
     av_frame_unref(rgb_frame);
-    av_frame_free(&video_frame);
-    av_frame_free(&audio_frame);
     av_frame_free(&rgb_frame);
 
-    if(video_codec_ctx) avcodec_free_context(&video_codec_ctx);
-    if(audio_codec_ctx) avcodec_free_context(&audio_codec_ctx);
     if(sws_context) sws_freeContext(sws_context);
+
+    for(auto codec_ctx : codec_contexts){
+        avcodec_free_context(&codec_ctx);
+    }
+
+    clear_frame_queues(video_frame_queues);
+    clear_frame_queues(audio_frame_queues);
+
+    av_packet_unref(packet);
+    av_packet_free(&packet);
+    av_frame_unref(frame);
+    av_frame_free(&frame);
+    av_frame_unref(rgb_frame);
+    av_frame_free(&rgb_frame);
 }
+
+
+void Movie::clear_frame_queues(std::queue<AVFrame*> queues){
+    AVFrame* tmp_frame;
+    while(queues.size() > 0){
+        tmp_frame = queues.front();
+        av_frame_unref(tmp_frame);
+        av_frame_free(&tmp_frame);
+        queues.pop();
+    }
+    return;
+}
+
+void Movie::parse_video_codec(int stream_ind, AVCodecParameters* codec_parameters){
+    assert(codec_parameters->codec_type == AVMEDIA_TYPE_VIDEO);
+
+    // init video infomation
+    height = codec_parameters->height;
+    width = codec_parameters->width;
+    fps = this->format_ctx->streams[stream_ind]->avg_frame_rate;
+    timebase = this->format_ctx->streams[stream_ind]->time_base;
+    current_pts = -1;
+    pts_per_frame = timebase.den / timebase.num / fps.num * fps.den;
+
+    // finds the registered decoder for a codec ID
+    AVCodec* video_codec = avcodec_find_decoder(codec_parameters->codec_id);
+    assert(video_codec);
+
+    // find the codec ctx
+    AVCodecContext* video_codec_ctx = avcodec_alloc_context3(video_codec);
+    assert(video_codec_ctx);
+
+    // Fill the codec context based on the values from the supplied codec parameters
+    assert(avcodec_parameters_to_context(video_codec_ctx, codec_parameters) >= 0);
+
+    // Initialize the AVCodecContext to use the given AVCodec.
+    assert(avcodec_open2(video_codec_ctx, video_codec, NULL) >= 0);
+
+    assert(codecs.size() == stream_ind);
+    codecs.push_back(video_codec);
+    codec_contexts.push_back(video_codec_ctx);
+    video_stream_indexs.push_back(stream_ind);
+    video_stream_index = stream_ind;
+
+    std::cout << "Video parameters init:" <<
+                 " fps=" << fps.num << "/" << fps.den <<
+                 " timebase=" << timebase.num << "/" << timebase.den <<
+                 " pts_per_frame=" << pts_per_frame <<
+                 " duration=" << duration <<
+                 " height=" << height << " width=" << width << std::endl;
+    return;
+}
+
+
+void Movie::parse_audio_codec(int stream_ind, AVCodecParameters* codec_parameters){
+    assert(codec_parameters->codec_type == AVMEDIA_TYPE_AUDIO);
+
+    // finds the registered decoder for a codec ID
+    AVCodec* audio_codec = avcodec_find_decoder(codec_parameters->codec_id);
+
+    // find the codec ctx
+    AVCodecContext* audio_codec_ctx = avcodec_alloc_context3(audio_codec);
+    assert(audio_codec_ctx);
+
+    // Fill the codec context based on the values from the supplied codec parameters
+    assert(avcodec_parameters_to_context(audio_codec_ctx, codec_parameters) >= 0);
+
+    // Initialize the AVCodecContext to use the given AVCodec.
+    assert(avcodec_open2(audio_codec_ctx, audio_codec, NULL) >= 0);
+
+    assert(codecs.size() == stream_ind);
+    codecs.push_back(audio_codec);
+    codec_contexts.push_back(audio_codec_ctx);
+    audio_stream_indexs.push_back(stream_ind);
+    audio_stream_index = stream_ind;
+
+    audio_sample_rate = audio_codec_ctx->sample_rate;
+    audio_channel = audio_codec_ctx->channels;
+    switch(audio_codec_ctx->sample_fmt){
+        case AV_SAMPLE_FMT_S16:
+            audio_sample_size = 16;
+            break;
+        case AV_SAMPLE_FMT_S32:
+            audio_sample_size = 32;
+            break;
+        case AV_SAMPLE_FMT_S64:
+            audio_sample_size = 64;
+            break;
+        default:
+            break;
+    }
+
+    std::cout << "Audio parameters init:" <<
+                 " sample_rate:" << audio_sample_rate <<
+                 " sample_channel:" << audio_channel <<
+                 " sample_size:" << audio_sample_size << std::endl;
+    return;
+}
+
 
 void Movie::init(std::string path)
 {
+    mutex.lock();
     movie_name = path;
     assert(avformat_open_input(&format_ctx, path.c_str(), NULL, NULL) == 0);
     assert(avformat_find_stream_info(format_ctx,  NULL) >= 0);
     duration = (double)format_ctx->duration / 1000000; // us -> s
+    n_streams = format_ctx->nb_streams;
+    std::cout << "Movie: " << movie_name << " Streams:" << n_streams << std::endl;
 
     // find the video codec parameters and audio codec parameters
     for(int i = 0; i < format_ctx->nb_streams; i++)
     {
-        AVCodecParameters *cur_codec_parameters =  NULL;
-        cur_codec_parameters = format_ctx->streams[i]->codecpar;
-        if(cur_codec_parameters->codec_type == AVMEDIA_TYPE_VIDEO)
-        {
-            video_stream_index = i;
-            video_codec_parameters = video_codec_parameters != NULL?
-                        video_codec_parameters : cur_codec_parameters;
+        AVCodecParameters *codec_parameters = NULL;
+        codec_parameters = format_ctx->streams[i]->codecpar;
+        if(codec_parameters->codec_type == AVMEDIA_TYPE_VIDEO){
+            parse_video_codec(i, codec_parameters);
         }
-        else if(cur_codec_parameters->codec_type == AVMEDIA_TYPE_AUDIO){
-            audio_stream_index = i;
-            audio_codec_parameters = audio_codec_parameters != NULL?
-                        audio_codec_parameters : cur_codec_parameters;
+        else if(codec_parameters->codec_type == AVMEDIA_TYPE_AUDIO){
+            parse_audio_codec(i, codec_parameters);
+        }
+        else{
+            assert(false);
         }
     }
-
-    // init the contex, codec of video
-    if(video_codec_parameters){
-        height = video_codec_parameters->height;
-        width = video_codec_parameters->width;
-        fps = format_ctx->streams[video_stream_index]->avg_frame_rate;
-        timebase = format_ctx->streams[video_stream_index]->time_base;
-        current_pts = -1;
-        pts_per_frame = timebase.den / timebase.num / fps.num * fps.den;
-
-        // finds the registered decoder for a codec ID
-        video_codec = avcodec_find_decoder(video_codec_parameters->codec_id);
-        assert(video_codec);
-
-        // find the codec ctx
-        video_codec_ctx = avcodec_alloc_context3(video_codec);
-        assert(video_codec_ctx);
-
-        // Fill the codec context based on the values from the supplied codec parameters
-        assert(avcodec_parameters_to_context(video_codec_ctx, video_codec_parameters) >= 0);
-
-        // Initialize the AVCodecContext to use the given AVCodec.
-        assert(avcodec_open2(video_codec_ctx, video_codec, NULL) >= 0);
-
-        std::cout << "Video init: path=" << movie_name <<
-                     " fps=" << fps.num << "/" << fps.den <<
-                     " timebase=" << timebase.num << "/" << timebase.den <<
-                     " pts_per_frame=" << pts_per_frame <<
-                     " duration=" << duration <<
-                     " height=" << height << " width=" << width << std::endl;
-    }
-
-    // init the contex, codec of audio
-    if(audio_codec_parameters){
-        audio_codec = avcodec_find_decoder(audio_codec_parameters->codec_id);
-        audio_codec_ctx = avcodec_alloc_context3(video_codec);
-    }
-
+    mutex.unlock();
     return;
 }
+
+
+void Movie::init_rgb_frame(int h, int w){
+    rgb_frame->height = h;
+    rgb_frame->width = w;
+    rgb_frame->format = AV_PIX_FMT_RGB24;
+    assert(av_frame_get_buffer(rgb_frame, 0) >= 0);
+}
+
+
+// "busy sleep" while suggesting that other threads run for a small amount of time
+void Movie::thread_sleep(std::chrono::microseconds us){
+    auto start = std::chrono::high_resolution_clock::now();
+    auto end = start + us;
+    do {
+        std::this_thread::yield();
+    } while (std::chrono::high_resolution_clock::now() < end);
+}
+
+
+void Movie::fetch_frame(){
+    while(true){
+        mutex.lock();
+        // fill > half not fill
+        if((video_frame_queues.size() > queue_max / 2) &&
+            (audio_frame_queues.size() > queue_max / 2)){
+            mutex.unlock();
+            thread_sleep(std::chrono::microseconds(10000)); // 10ms
+        }
+        else{
+            // read a frame
+            av_packet_unref(packet);
+            if(av_read_frame(format_ctx, packet) >= 0){
+                if((packet->stream_index == video_stream_index) ||
+                    (packet->stream_index == audio_stream_index)){
+                    AVFrame* tmp_frame = av_frame_alloc();
+                    assert(avcodec_send_packet(codec_contexts[packet->stream_index], packet) >= 0)
+                    int ret = avcodec_receive_frame(codec_contexts[packet->stream_index], tmp_frame);
+                    if(!(ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)){
+                        if(packet->stream_index == video_stream_index){
+                            video_frame_queues.push(tmp_frame);
+                        }
+                        else{
+                            audio_frame_queues.push(tmp_frame);
+                        }
+                    }
+                }
+            }
+            mutex.unlock();
+        }
+    }
+}
+
 
 // get the next video packet to the video_packet
 bool Movie::next_video_packet(){
     while(av_read_frame(format_ctx, video_packet) >= 0){
+
+
         if(video_packet->stream_index == video_stream_index){
             assert(avcodec_send_packet(video_codec_ctx, video_packet) >= 0);
             av_packet_unref(video_packet);
@@ -166,18 +283,7 @@ void Movie::seek_frame(int64_t target_frame){
 }
 
 
-void Movie::init_rgb_frame(int h, int w){
-    rgb_frame = av_frame_alloc();
-    assert(rgb_frame);
-
-    rgb_frame->height = h;
-    rgb_frame->width = w;
-    rgb_frame->format = AV_PIX_FMT_RGB24;
-    assert(av_frame_get_buffer(rgb_frame, 0) >= 0);
-}
-
-
-void Movie::write_rgb_frame(){
+void Movie::write_rgb_frame(AVFrame* video_frame){
 
     // create a swith context, for example, AV_PIX_FMT_YUV420P to AV_PIX_FMT_RGB24
     if(sws_context == NULL){

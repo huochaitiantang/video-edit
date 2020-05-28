@@ -67,8 +67,8 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     //for debug
-    //std::string path = "E:/QT/videos/S2-P5-160912.mp4";
-    //imglabel->set_movie(path);
+    std::string path = "E:/QT/videos/S2-P5-160912.mp4";
+    imglabel->set_movie(path);
 }
 
 void MainWindow::adjust_size(){

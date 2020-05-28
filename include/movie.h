@@ -17,12 +17,17 @@ extern "C" {
 
 #include<string>
 #include<QImage>
+#include<vector>
+#include<queue>
+#include<chrono>
+#include<thread>
+#include<QMutex>
 
 class Movie
 {
 private:
     std::string movie_name = "";
-    int height,width;
+    int height, width;
     AVRational fps, timebase;
     int video_frame_index;
     bool ret_packet = false;
@@ -30,29 +35,36 @@ private:
     int64_t current_pts;
     int64_t pts_per_frame;
 
-    int video_stream_index, audio_stream_index;
+    int audio_sample_rate = 48000;
+    int audio_sample_size = 16;
+    int audio_channel = 2;
+
     AVFormatContext * format_ctx;
-
-    AVCodec * video_codec = NULL;
-    AVCodec * audio_codec = NULL;
-
-    AVFrame * video_frame = NULL;
-    AVFrame * audio_frame = NULL;
     AVFrame * rgb_frame = NULL;
-
-    AVPacket * video_packet = NULL;
-    AVPacket * audio_packet = NULL;
-
-    AVCodecContext * video_codec_ctx = NULL;
-    AVCodecContext * audio_codec_ctx = NULL;
-
-    AVCodecParameters * video_codec_parameters = NULL;
-    AVCodecParameters * audio_codec_parameters = NULL;
-
+    AVFrame * frame = NULL;
+    AVPacket * packet = NULL;
     SwsContext* sws_context = NULL;
 
+    int n_streams = 0;
+    std::vector<int> video_stream_indexs;
+    std::vector<int> audio_stream_indexs;
+    int video_stream_index;
+    int audio_stream_index;
+    std::vector<AVCodec*> codecs;
+    std::vector<AVCodecContext*> codec_contexts;
+    //std::vector<std::queue<AVFrame*> > frame_queues;
+    std::queue<AVFrame*> video_frame_queues;
+    std::queue<AVFrame*> audio_frame_queues;
+    int queue_max = 500;
+    QMutex mutex;
+
+    void parse_video_codec(int stream_ind, AVCodecParameters* codec_parameters);
+    void parse_audio_codec(int stream_ind, AVCodecParameters* codec_parameters);
+    void thread_sleep(std::chrono::microseconds us);
+
     bool next_video_packet();
-    void write_rgb_frame();
+    void write_rgb_frame(AVFrame* video_frame);
+    void clear_frame_queues(std::queue<AVFrame*> queues);
 
 
 public:
@@ -72,6 +84,7 @@ public:
     int get_frame_count();
     int64_t get_max_pts();
     void seek_frame(int64_t target_frame);
+    void fetch_frame();
 
 };
 

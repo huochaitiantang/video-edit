@@ -16,6 +16,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    src/fetchframethread.cpp \
     src/movie.cpp \
     src/imglabel.cpp \
     src/main.cpp \
@@ -28,9 +29,11 @@ DEPENDPATH += E:\ffmpeg-dev\include
 LIBS += -LE:\ffmpeg-dev\lib -lavutil -lavformat -lavcodec -lavdevice -lavfilter -lpostproc -lswresample -lswscale
 
 HEADERS += \
+    include/fetchframethread.h \
     include/imglabel.h \
     include/mainwindow.h \
-    include/movie.h
+    include/movie.h \
+    include/fetchframethread.h
 
 FORMS += \
     ui/mainwindow.ui

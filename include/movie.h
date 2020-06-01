@@ -30,7 +30,6 @@ private:
     int height, width;
     AVRational fps, timebase;
     int video_frame_index;
-    bool ret_packet = false;
     double duration;
     int64_t current_pts;
     int64_t pts_per_frame;
@@ -42,6 +41,8 @@ private:
     AVFormatContext * format_ctx;
     AVFrame * rgb_frame = NULL;
     AVFrame * frame = NULL;
+    AVFrame * video_frame = NULL;
+    AVFrame * audio_frame = NULL;
     AVPacket * packet = NULL;
     SwsContext* sws_context = NULL;
 
@@ -72,7 +73,7 @@ public:
     ~Movie();
     void init(std::string move_path);
     void init_rgb_frame(int h, int w);
-    bool next_video_frame();
+
     void write_qimage(QImage * img, int top_h, int top_w);
     int get_width();
     int get_height();
@@ -83,6 +84,7 @@ public:
     double get_fps();
     int get_frame_count();
     int64_t get_max_pts();
+    bool next_frame();
     void seek_frame(int64_t target_frame);
     void fetch_frame();
 

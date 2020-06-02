@@ -206,7 +206,7 @@ void Movie::fetch_frame(){
                 if((packet->stream_index == video_stream_index) ||
                     (packet->stream_index == audio_stream_index)){
                     AVFrame* tmp_frame = av_frame_alloc();
-                    assert(avcodec_send_packet(codec_contexts[packet->stream_index], packet) >= 0)
+                    assert(avcodec_send_packet(codec_contexts[packet->stream_index], packet) >= 0);
                     int ret = avcodec_receive_frame(codec_contexts[packet->stream_index], tmp_frame);
                     if(!(ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)){
                         if(packet->stream_index == video_stream_index){

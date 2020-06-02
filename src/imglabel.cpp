@@ -66,6 +66,10 @@ void ImgLabel::set_movie(std::string path){
     init_qimage(this->image, H, W);
     this->movie->init_rgb_frame(image_h, image_w);
 
+    // start the fetch frame thread
+    fetch_frame_thread = new FetchFrameThread(this);
+    fetch_frame_thread->start();
+
     // init the progress slider
     movie_duration = movie->get_video_duration();
     movie_fps = movie->get_fps();
@@ -89,10 +93,15 @@ void ImgLabel::clear_movie(){
         this->progress->setValue(0);
         disconnect(this->progress);
     }
+    if(this->fetch_frame_thread){
+        this->fetch_frame_thread->quit();
+        this->fetch_frame_thread->wait();
+        delete this->fetch_frame_thread;
+    }
 }
 
 bool ImgLabel::display_next_frame(){
-    if((this->movie) && (this->movie->next_video_frame())){
+    if((this->movie) && (this->movie->next_frame())){
         this->movie->write_qimage(image, top_h, top_w);
         this->setPixmap(QPixmap::fromImage(*(this->image)));
 

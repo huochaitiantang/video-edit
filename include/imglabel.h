@@ -15,6 +15,7 @@
 #include <QObject>
 #include <QCoreApplication>
 #include "movie.h"
+#include "fetchframethread.h"
 
 class ImgLabel : public QLabel
 {
@@ -36,6 +37,7 @@ class ImgLabel : public QLabel
         double movie_fps;
         int movie_frame_count;
         double play_times = 1.0;
+        FetchFrameThread* fetch_frame_thread;
 
 
         bool display_next_frame();

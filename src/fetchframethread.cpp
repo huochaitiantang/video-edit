@@ -5,8 +5,8 @@ FetchFrameThread::FetchFrameThread(QObject* parent) : QThread(parent){
 }
 
 FetchFrameThread::~FetchFrameThread(){
-    if(this->movie) this->movie = NULL;
-    QThread::~QThread();
+    //if(this->movie) this->movie = NULL;
+    //QThread::~QThread();
 }
 
 void FetchFrameThread::set_movie(Movie* m){
@@ -15,6 +15,6 @@ void FetchFrameThread::set_movie(Movie* m){
 
 void FetchFrameThread::run(){
     if(this->movie){
-        this->movie->fetch_frame();
+        //this->movie->fetch_frame();
     }
 }

@@ -14,6 +14,8 @@
 #include <QSlider>
 #include <QObject>
 #include <QCoreApplication>
+#include <QAudioOutput>
+#include <QAudioFormat>
 #include "movie.h"
 #include "fetchframethread.h"
 
@@ -37,8 +39,13 @@ class ImgLabel : public QLabel
         double movie_fps;
         int movie_frame_count;
         double play_times = 1.0;
-        FetchFrameThread* fetch_frame_thread;
+        FetchFrameThread* fetch_frame_thread = NULL;
 
+        QAudioOutput *audio_output = NULL;
+        QIODevice *audio_io = NULL;
+        int audio_play_sample_rate = 48000;
+        int audio_play_sample_size = 16;
+        int audio_play_channel = 2;
 
         bool display_next_frame();
         void clear_movie();

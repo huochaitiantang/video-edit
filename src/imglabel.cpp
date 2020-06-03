@@ -66,8 +66,21 @@ void ImgLabel::set_movie(std::string path){
     init_qimage(this->image, H, W);
     this->movie->init_rgb_frame(image_h, image_w);
 
+    // init the audio
+    QAudioFormat audio_fmt;
+    audio_fmt.setSampleRate(audio_play_sample_rate);
+    audio_fmt.setSampleSize(audio_play_sample_size);
+    audio_fmt.setChannelCount(audio_play_channel);
+    audio_fmt.setCodec("audio/pcm");
+    audio_fmt.setByteOrder(QAudioFormat::LittleEndian);
+    audio_fmt.setSampleType(QAudioFormat::UnSignedInt);
+    audio_output = new QAudioOutput(audio_fmt);
+    audio_io = audio_output->start();
+
+
     // start the fetch frame thread
     fetch_frame_thread = new FetchFrameThread(this);
+    fetch_frame_thread->set_movie(this->movie);
     fetch_frame_thread->start();
 
     // init the progress slider
@@ -83,7 +96,7 @@ void ImgLabel::set_movie(std::string path){
     connect(this->progress, SIGNAL(sliderReleased()), this, SLOT(set_progress_end()));
     connect(this->progress, SIGNAL(valueChanged(int)), this, SLOT(progress_change()));
 
-    display_next_frame();
+    //display_next_frame();
 }
 
 void ImgLabel::clear_movie(){
@@ -92,6 +105,10 @@ void ImgLabel::clear_movie(){
         this->movie = NULL;
         this->progress->setValue(0);
         disconnect(this->progress);
+    }
+    if(this->audio_output){
+        audio_output->bytesFree();
+        delete audio_output;
     }
     if(this->fetch_frame_thread){
         this->fetch_frame_thread->quit();
@@ -104,6 +121,8 @@ bool ImgLabel::display_next_frame(){
     if((this->movie) && (this->movie->next_frame())){
         this->movie->write_qimage(image, top_h, top_w);
         this->setPixmap(QPixmap::fromImage(*(this->image)));
+
+        this->movie->write_qaudio(audio_io);
 
         int ind = this->movie->get_video_frame_index();
         this->progress->setValue(ind);
@@ -257,6 +276,8 @@ void ImgLabel::mouseReleaseEvent(QMouseEvent *event){
 
 void ImgLabel::paintEvent(QPaintEvent *event){
     QLabel::paintEvent(event);
+
+
     if(!display_lock && on_play){
         timeb t1, t2;
         ftime(&t1);

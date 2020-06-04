@@ -34,20 +34,15 @@ private:
     std::string movie_name = "";
     int height, width;
     AVRational video_fps, video_timebase, audio_timebase;
-    //int video_frame_index;
     double duration;
-    //int64_t current_pts;
-    //int64_t pts_per_frame;
-
     int audio_sample_rate = 48000;
     int audio_sample_size = 16;
     int audio_channel = 2;
+    int audio_layout_channel = 2;
 
     AVFormatContext * format_ctx;
     AVFrame * rgb_frame = NULL;
     AVFrame * frame = NULL;
-    //AVFrame * video_frame = NULL;
-    //AVFrame * audio_frame = NULL;
     AVPacket * packet = NULL;
     SwsContext* sws_context = NULL;
     SwrContext* swr_context = NULL;
@@ -68,8 +63,8 @@ private:
     double base_pts_ms;
 
     QMutex mutex;
-    char *pcm_buf = new char[48000 * 4 * 2];
-    char pcm_len = 0;
+    char *pcm_buf = new char[48000];
+    int pcm_len = 0;
     double play_times = 1.0;
 
     void clear_frame_vectors(std::vector<AVFrame*> &vs);
@@ -108,6 +103,7 @@ public:
     double get_video_fps();
 
     int get_audio_sample_channel();
+    int get_audio_layout_channel();
     int get_audio_sample_size();
     int get_audio_sample_rate();
 

@@ -24,6 +24,7 @@ Movie::~Movie()
     av_frame_free(&rgb_frame);
 
     if(sws_context) sws_freeContext(sws_context);
+    if(swr_context) swr_free(&swr_context);
 
     for(auto codec_ctx : codec_contexts){
         avcodec_free_context(&codec_ctx);
@@ -39,7 +40,7 @@ Movie::~Movie()
     av_frame_unref(rgb_frame);
     av_frame_free(&rgb_frame);
 
-    delete pcm_buf;
+    free(pcm_buf);
 }
 
 
@@ -52,6 +53,7 @@ void Movie::clear_frame_vectors(std::vector<AVFrame*>& vs){
         vs.pop_back();
     }
 }
+
 
 void Movie::parse_video_codec(int stream_ind, AVCodecParameters* codec_parameters){
     assert(codec_parameters->codec_type == AVMEDIA_TYPE_VIDEO);
@@ -115,6 +117,7 @@ void Movie::parse_audio_codec(int stream_ind, AVCodecParameters* codec_parameter
     audio_timebase = this->format_ctx->streams[stream_ind]->time_base;
     audio_sample_rate = audio_codec_ctx->sample_rate;
     audio_channel = audio_codec_ctx->channels;
+    audio_layout_channel = audio_codec_ctx->channel_layout;
     switch(audio_codec_ctx->sample_fmt){
         case AV_SAMPLE_FMT_S16:
             audio_sample_size = 16;
@@ -133,6 +136,7 @@ void Movie::parse_audio_codec(int stream_ind, AVCodecParameters* codec_parameter
                  " audio_timebase" << audio_timebase.num << "/" << audio_timebase.den <<
                  " sample_rate:" << audio_sample_rate <<
                  " sample_channel:" << audio_channel <<
+                 " layout_channel:" << audio_layout_channel <<
                  " sample_size:" << audio_sample_size << std::endl;
     return;
 }
@@ -288,6 +292,7 @@ void Movie::adjust_video_frames(){
     mutex.unlock();
     return;
 }
+
 
 void Movie::adjust_audio_frames(){
     // buffer the frame near 3 second
@@ -471,7 +476,6 @@ int Movie::search_audio_frame_by_ms(double millsecs){
 }
 
 
-
 bool Movie::seek(double millsecs){
     mutex.lock();
     if(video_frames.size() <= 0 || audio_frames.size() <= 0){
@@ -551,34 +555,30 @@ void Movie::write_rgb_frame(){
 
 void Movie::write_audio_frame(){
     assert(audio_frame_ind >= 0 && audio_frame_ind < audio_frames.size());
+    AVCodecContext * audio_ctx = codec_contexts[audio_stream_index];
     AVFrame* audio_frame = audio_frames[audio_frame_ind];
     // audio resample to the format same to the qt play format
     if(swr_context == NULL){
         swr_context = swr_alloc();
         swr_alloc_set_opts(swr_context,
-            codec_contexts[audio_stream_index]->channel_layout,
-            AV_SAMPLE_FMT_S16,
-            audio_sample_rate,
-            audio_channel,
-            codec_contexts[audio_stream_index]->sample_fmt,
-            audio_sample_rate, 0, 0);
+                        audio_ctx->channel_layout, AV_SAMPLE_FMT_S16, audio_ctx->sample_rate,
+                        audio_ctx->channel_layout, audio_ctx->sample_fmt, audio_ctx->sample_rate,
+                        0, 0);
         swr_init(swr_context);
     }
 
-    pcm_len = av_samples_get_buffer_size(NULL,
-        audio_channel,
-        audio_frame->nb_samples,
-        AV_SAMPLE_FMT_S16, 0);
-
     uint8_t *pcm_out[2] = {0};
     pcm_out[0] = (uint8_t *)pcm_buf;
-    int read_len = swr_convert(swr_context,
-                    pcm_out,
-                    audio_frame->nb_samples,
-                    (const uint8_t **)audio_frame->data,
-                    audio_frame->nb_samples
-               );
-    if(read_len <= 0) pcm_len = 0;
+    int ret = swr_convert(swr_context, pcm_out, 4096,
+                    (const uint8_t **)(audio_frame->data),
+                    audio_frame->nb_samples);
+    int outsize = av_samples_get_buffer_size(NULL, audio_ctx->channels, audio_frame->nb_samples, AV_SAMPLE_FMT_S16, 0);
+    pcm_len = outsize;
+
+    //pcm_len = ret;
+    std::cout << "read_len:" << ret << std::endl;
+    std::cout << "pcm_len:" << pcm_len << std::endl;
+    std::cout << "nb samples:" << audio_frame->nb_samples << std::endl;
 }
 
 
@@ -632,6 +632,10 @@ double Movie::get_video_fps(){
 
 int Movie::get_audio_sample_channel(){
     return audio_channel;
+}
+
+int Movie::get_audio_layout_channel(){
+    return audio_layout_channel;
 }
 
 int Movie::get_audio_sample_size(){

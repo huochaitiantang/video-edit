@@ -39,9 +39,6 @@ class ImgLabel : public QLabel
 
         QAudioOutput *audio_output = NULL;
         QIODevice *audio_io = NULL;
-        int audio_play_sample_rate = 48000;
-        int audio_play_sample_size = 16;
-        int audio_play_channel = 2;
 
         FetchFrameThread* fetch_frame_thread = NULL;
         PlayVideoThread* play_video_thread = NULL;

@@ -62,14 +62,15 @@ void ImgLabel::set_movie(std::string path){
 
     // init the qaudio
     QAudioFormat audio_fmt;
-    audio_fmt.setSampleRate(audio_play_sample_rate);
-    audio_fmt.setSampleSize(audio_play_sample_size);
-    audio_fmt.setChannelCount(audio_play_channel);
+    audio_fmt.setSampleRate(44100);
+    audio_fmt.setSampleSize(16);
+    audio_fmt.setChannelCount(2);
     audio_fmt.setCodec("audio/pcm");
     audio_fmt.setByteOrder(QAudioFormat::LittleEndian);
     audio_fmt.setSampleType(QAudioFormat::UnSignedInt);
-    audio_output = new QAudioOutput(audio_fmt);
-    audio_io = audio_output->start();
+
+     audio_output = new QAudioOutput(audio_fmt, this);
+     audio_io = audio_output->start();
 
     // init the progress slider
     movie_duration = movie->get_duration() * 1000; // ms
@@ -103,9 +104,8 @@ void ImgLabel::clear_movie(){
         delete this->movie;
         this->movie = NULL;
         this->progress->setValue(0);
-        disconnect(this->progress);
     }
-    if(this->audio_output){
+    if(this->audio_output != NULL){
         audio_output->bytesFree();
         delete audio_output;
     }

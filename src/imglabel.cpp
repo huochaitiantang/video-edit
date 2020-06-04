@@ -62,15 +62,15 @@ void ImgLabel::set_movie(std::string path){
 
     // init the qaudio
     QAudioFormat audio_fmt;
-    audio_fmt.setSampleRate(44100);
+    audio_fmt.setSampleRate(movie->get_audio_sample_rate());
     audio_fmt.setSampleSize(16);
-    audio_fmt.setChannelCount(2);
+    audio_fmt.setChannelCount(movie->get_audio_sample_channel());
     audio_fmt.setCodec("audio/pcm");
     audio_fmt.setByteOrder(QAudioFormat::LittleEndian);
     audio_fmt.setSampleType(QAudioFormat::UnSignedInt);
 
-     audio_output = new QAudioOutput(audio_fmt, this);
-     audio_io = audio_output->start();
+    audio_output = new QAudioOutput(audio_fmt, this);
+    audio_io = audio_output->start();
 
     // init the progress slider
     movie_duration = movie->get_duration() * 1000; // ms
@@ -96,33 +96,40 @@ void ImgLabel::set_movie(std::string path){
     play_audio_thread->set_movie(movie);
     connect(play_audio_thread, SIGNAL(play_one_frame_over()), this, SLOT(update_audio()));
 
-    fetch_frame_thread->start();
+    update_image();
+    update_audio();
 }
 
 void ImgLabel::clear_movie(){
-    if(this->movie){
-        delete this->movie;
-        this->movie = NULL;
-        this->progress->setValue(0);
-    }
     if(this->audio_output != NULL){
         audio_output->bytesFree();
         delete audio_output;
     }
-    if(fetch_frame_thread){
+    if(fetch_frame_thread != NULL){
         fetch_frame_thread->quit();
         fetch_frame_thread->wait();
         delete fetch_frame_thread;
     }
-    if(play_video_thread){
+    // for dead lock
+    if(on_play == false){
+        play_video_thread->resume();
+        play_audio_thread->resume();
+        first_play_click = true;
+    }
+    if(play_video_thread != NULL){
         play_video_thread->quit();
         play_video_thread->wait();
         delete play_video_thread;
     }
-    if(play_audio_thread){
+    if(play_audio_thread != NULL){
         play_audio_thread->quit();
         play_audio_thread->wait();
         delete play_audio_thread;
+    }
+    if(this->movie){
+        delete this->movie;
+        this->movie = NULL;
+        this->progress->setValue(0);
     }
 }
 
@@ -180,17 +187,21 @@ void ImgLabel::progress_change(){
 void ImgLabel::play(){
     on_play = true;
     this->movie->restart();
-    audio_output->resume();
-    //fetch_frame_thread->resume();
-    play_video_thread->resume();
-    play_audio_thread->resume();
+
+    if(first_play_click != true){
+        audio_output->resume();
+        play_video_thread->resume();
+        play_audio_thread->resume();
+    }
+    else{
+        first_play_click = false;
+    }
     this->update();
 }
 
 void ImgLabel::pause(){
     on_play = false;
     audio_output->suspend();
-    //fetch_frame_thread->pause();
     play_video_thread->pause();
     play_audio_thread->pause();
     this->update();
@@ -249,8 +260,10 @@ void ImgLabel::mouseReleaseEvent(QMouseEvent *event){
 
 void ImgLabel::paintEvent(QPaintEvent *event){
     QLabel::paintEvent(event);
-    if(!display_lock && fetch_frame_thread && play_video_thread && play_audio_thread){
-        //fetch_frame_thread->start();
+    if(fetch_frame_thread){
+        fetch_frame_thread->start();
+    }
+    if(on_play && !display_lock && play_video_thread && play_audio_thread){
         play_video_thread->start();
         play_audio_thread->start();
     }

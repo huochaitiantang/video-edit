@@ -40,38 +40,31 @@ void PlayAudioThread::set_movie(Movie *m){
 
 void FetchFrameThread::run(){
     if(this->movie){
-        while(true){
-
-            mutex.lock();
-            this->movie->adjust_audio_frames();
-            this->movie->adjust_video_frames();
-            mutex.unlock();
-            Sleep(5);
-        }
+        mutex.lock();
+        this->movie->adjust_audio_frames();
+        this->movie->adjust_video_frames();
+        mutex.unlock();
+        Sleep(5);
     }
 }
 
 void PlayVideoThread::run(){
     if(this->movie){
-        //while(true){
-            mutex.lock();
-            if(this->movie->play_video_frame()){
-                emit play_one_frame_over();
-            }
-            mutex.unlock();
-        //}
+        mutex.lock();
+        if(this->movie->play_video_frame()){
+            emit play_one_frame_over();
+        }
+        mutex.unlock();
     }
 }
 
 void PlayAudioThread::run(){
     if(this->movie){
-        //while(true){
-            mutex.lock();
-            if(this->movie->play_audio_frame()){
-                emit play_one_frame_over();
-            }
-            mutex.unlock();
-        //}
+        mutex.lock();
+        if(this->movie->play_audio_frame()){
+            emit play_one_frame_over();
+        }
+        mutex.unlock();
     }
 }
 

@@ -44,6 +44,7 @@ class ImgLabel : public QLabel
         PlayVideoThread* play_video_thread = NULL;
         PlayAudioThread* play_audio_thread = NULL;
 
+        bool first_play_click = false;
         bool display_next_frame();
         void clear_movie();
         std::string format_time(double second);

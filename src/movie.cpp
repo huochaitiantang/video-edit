@@ -8,15 +8,18 @@
 
 Movie::Movie()
 {
+    mutex.lock();
     format_ctx = avformat_alloc_context();
     frame = av_frame_alloc();
     rgb_frame = av_frame_alloc();
     packet = av_packet_alloc();
     assert(frame && rgb_frame && packet);
+    mutex.unlock();
 }
 
 Movie::~Movie()
 {
+    mutex.lock();
     avformat_close_input(&format_ctx);
     avformat_free_context(format_ctx);
 
@@ -41,6 +44,7 @@ Movie::~Movie()
     av_frame_free(&rgb_frame);
 
     free(pcm_buf);
+    mutex.unlock();
 }
 
 

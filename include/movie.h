@@ -46,8 +46,8 @@ private:
     AVFormatContext * format_ctx;
     AVFrame * rgb_frame = NULL;
     AVFrame * frame = NULL;
-    AVFrame * video_frame = NULL;
-    AVFrame * audio_frame = NULL;
+    //AVFrame * video_frame = NULL;
+    //AVFrame * audio_frame = NULL;
     AVPacket * packet = NULL;
     SwsContext* sws_context = NULL;
     SwrContext* swr_context = NULL;
@@ -67,18 +67,18 @@ private:
     double base_sys_ms;
     double base_pts_ms;
 
-    //QMutex mutex;
+    QMutex mutex;
     char *pcm_buf = new char[48000 * 4 * 2];
     char pcm_len = 0;
+    double play_times = 1.0;
 
-    void clear_frame_vectors(std::vector<AVFrame*> vs);
-    void adjust_frame_vectors();
+    void clear_frame_vectors(std::vector<AVFrame*> &vs);
 
     void parse_video_codec(int stream_ind, AVCodecParameters* codec_parameters);
     void parse_audio_codec(int stream_ind, AVCodecParameters* codec_parameters);
 
-    void write_rgb_frame(AVFrame* video_frame);
-    void write_audio_frame(AVFrame * audio_frame);
+    void write_rgb_frame();
+    void write_audio_frame();
 
     double audio_pts_to_ms(int64_t pts);
     double video_pts_to_ms(int64_t pts);
@@ -86,7 +86,10 @@ private:
     void decode_one_packet();
     bool fetch_some_packets();
 
-
+    void first_display();
+    int search_video_frame_by_ms(double millsecs);
+    int search_audio_frame_by_ms(double millsecs);
+    bool hard_seek(double millsecs);
 
 public:
     Movie();
@@ -96,21 +99,29 @@ public:
 
     void write_qimage(QImage * img, int top_h, int top_w);
     void write_qaudio(QIODevice * audio_io);
+
     int get_width();
     int get_height();
-    //int get_video_frame_index();
     std::string get_movie_name();
-    //double get_video_frame_timestamp();
+
     double get_duration();
     double get_video_fps();
-    //int get_frame_count();
-    //int64_t get_max_pts();
-    bool next_frame();
-    void seek_frame(int64_t target_frame);
 
     int get_audio_sample_channel();
     int get_audio_sample_size();
     int get_audio_sample_rate();
+
+    bool play_video_frame();
+    bool play_audio_frame();
+    double get_video_frame_ms();
+    double get_audio_frame_ms();
+
+    bool seek(double millsecs);
+
+    void adjust_video_frames();
+    void adjust_audio_frames();
+    void restart();
+    void set_play_times(double x);
 
 };
 

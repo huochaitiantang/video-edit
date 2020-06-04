@@ -33,13 +33,9 @@ class ImgLabel : public QLabel
         int image_h, image_w, top_h, top_w;
         bool display_lock = false;
         bool on_play = true;
-        double system_anchor_time;
-        double movie_anchor_time;
         double movie_duration;
         double movie_fps;
-        int movie_frame_count;
         double play_times = 1.0;
-        FetchFrameThread* fetch_frame_thread = NULL;
 
         QAudioOutput *audio_output = NULL;
         QIODevice *audio_io = NULL;
@@ -47,19 +43,21 @@ class ImgLabel : public QLabel
         int audio_play_sample_size = 16;
         int audio_play_channel = 2;
 
+        FetchFrameThread* fetch_frame_thread = NULL;
+        PlayVideoThread* play_video_thread = NULL;
+        PlayAudioThread* play_audio_thread = NULL;
+
         bool display_next_frame();
         void clear_movie();
         std::string format_time(double second);
-        double get_system_time();
-        int64_t seek_almost(int64_t target_frame);
-        int jump_to_frame(int64_t target_frame);
-        int forward_until(int ind, int64_t target_frame);
         void init_qimage(QImage * img, int H, int W);
 
     private slots:
         void set_progress_start();
         void set_progress_end();
         void progress_change();
+        void update_image();
+        void update_audio();
 
     public:
         ImgLabel(QWidget *parent, QLabel *info, QSlider *progress);
@@ -67,11 +65,11 @@ class ImgLabel : public QLabel
         void set_movie(std::string path);
         void play();
         void pause();
-        void set_play_times(double x);
-        void set_frame(int frame_index);
+
         int get_W();
         int get_H();
-        void fast_forward_frame(int delta);
+        void set_play_times(double x);
+        void set_second(double target_ms);
         void fast_forward_second(double delta);
 
     protected:

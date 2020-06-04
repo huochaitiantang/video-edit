@@ -2,6 +2,8 @@
 #include<iostream>
 #include<algorithm>
 #include "movie.h"
+#include<sys/timeb.h>
+#include<windows.h>
 
 
 Movie::Movie()
@@ -20,10 +22,6 @@ Movie::~Movie()
 
     av_frame_unref(rgb_frame);
     av_frame_free(&rgb_frame);
-    av_frame_unref(video_frame);
-    av_frame_free(&video_frame);
-    av_frame_unref(audio_frame);
-    av_frame_free(&audio_frame);
 
     if(sws_context) sws_freeContext(sws_context);
 
@@ -45,7 +43,7 @@ Movie::~Movie()
 }
 
 
-void Movie::clear_frame_vectors(std::vector<AVFrame*> vs){
+void Movie::clear_frame_vectors(std::vector<AVFrame*>& vs){
     AVFrame* tmp_frame;
     while(vs.size() > 0){
         tmp_frame = vs.back();
@@ -53,7 +51,6 @@ void Movie::clear_frame_vectors(std::vector<AVFrame*> vs){
         av_frame_free(&tmp_frame);
         vs.pop_back();
     }
-
 }
 
 void Movie::parse_video_codec(int stream_ind, AVCodecParameters* codec_parameters){
@@ -143,6 +140,7 @@ void Movie::parse_audio_codec(int stream_ind, AVCodecParameters* codec_parameter
 
 void Movie::init(std::string path)
 {
+    mutex.lock();
     movie_name = path;
     assert(avformat_open_input(&format_ctx, path.c_str(), NULL, NULL) == 0);
     assert(avformat_find_stream_info(format_ctx,  NULL) >= 0);
@@ -167,23 +165,36 @@ void Movie::init(std::string path)
             assert(false);
         }
     }
+    mutex.unlock();
+    return;
+}
 
-    fetch_some_packets();
-    audio_frame_ind = video_frame_ind = 0;
+// first display
+void Movie::first_display(){
+    assert(audio_frame_ind >= 0 && audio_frame_ind < audio_frames.size());
+    assert(video_frame_ind >= 0 && video_frame_ind < video_frames.size());
     double ms1 = video_pts_to_ms(video_frames[video_frame_ind]->pts);
     double ms2 = audio_pts_to_ms(audio_frames[audio_frame_ind]->pts);
+    assert(ms1 >= 0 && ms2 >= 0);
     base_pts_ms = ms1 < ms2 ? ms1 : ms2;
     base_sys_ms = (double)(QDateTime::currentDateTime().toMSecsSinceEpoch());
-
-    return;
+    write_rgb_frame();
+    write_audio_frame();
 }
 
 
 void Movie::init_rgb_frame(int h, int w){
+    mutex.lock();
     rgb_frame->height = h;
     rgb_frame->width = w;
     rgb_frame->format = AV_PIX_FMT_RGB24;
     assert(av_frame_get_buffer(rgb_frame, 0) >= 0);
+
+    // first display
+    fetch_some_packets();
+    audio_frame_ind = video_frame_ind = 0;
+    first_display();
+    mutex.unlock();
 }
 
 
@@ -199,12 +210,15 @@ void Movie::decode_one_packet(){
         while(!(ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)){
             if(packet->stream_index == video_stream_index){
                 video_frames.push_back(tmp_frame);
-                std::cout << "Read Video Frame, PTS = " << tmp_frame->pts << std::endl;
+                //std::cout << "Read Video Frame, PTS = " << tmp_frame->pts
+                //          << ", secs = " << video_pts_to_ms(tmp_frame->pts)/1000 << std::endl;
             }
             else{
                 audio_frames.push_back(tmp_frame);
-                std::cout << "Read Audio Frame, PTS = " << tmp_frame->pts << std::endl;
+                //std::cout << "Read Audio Frame, PTS = " << tmp_frame->pts
+                //          << ", secs = " << audio_pts_to_ms(tmp_frame->pts)/1000 << std::endl;
             }
+            tmp_frame = av_frame_alloc();
             ret = avcodec_receive_frame(codec_contexts[packet->stream_index], tmp_frame);
         }
     }
@@ -213,8 +227,10 @@ void Movie::decode_one_packet(){
 
 
 bool Movie::fetch_some_packets(){
-    // each time handle 20 packets
-    for(int i = 0; i < 20; i++){
+    // each time handle 10 packets
+    double st = (double)(QDateTime::currentDateTime().toMSecsSinceEpoch());
+    int i = 0;
+    while(i < 5 || video_frames.size() <= 0 || audio_frames.size() <= 0){
         // read a frame
         av_packet_unref(packet);
         if(av_read_frame(format_ctx, packet) >= 0){
@@ -223,14 +239,24 @@ bool Movie::fetch_some_packets(){
         else{
             return false;
         }
+        i++;
     }
+    double et = (double)(QDateTime::currentDateTime().toMSecsSinceEpoch());
+
+    std::cout << "Fetch cost: " << et - st << " ms"
+              << ", video frame len:" << video_frames.size()
+              << ", audio frame len:" << audio_frames.size()
+              << ", video frame ind:" << video_frame_ind
+              << ", audio fraem ind:" << audio_frame_ind << std::endl;
+
     return true;
 }
 
 
-void Movie::adjust_frame_vectors(){
+void Movie::adjust_video_frames(){
     // buffer the frame near 3 second
     double radius = 3000;
+    mutex.lock();
 
     // for video
     if(video_frames.size() > 0){
@@ -256,6 +282,17 @@ void Movie::adjust_frame_vectors(){
             fetch_some_packets();
         }
     }
+    else{
+        fetch_some_packets();
+    }
+    mutex.unlock();
+    return;
+}
+
+void Movie::adjust_audio_frames(){
+    // buffer the frame near 3 second
+    double radius = 3000;
+    mutex.lock();
 
     // for audio
     if(audio_frames.size() > 0){
@@ -281,94 +318,214 @@ void Movie::adjust_frame_vectors(){
             fetch_some_packets();
         }
     }
+    else{
+        fetch_some_packets();
+    }
+    mutex.unlock();
     return;
 }
 
 
-bool Movie::next_frame(){
-    adjust_frame_vectors();
-
-
-
-
-    av_frame_unref(video_frame);
-    av_frame_free(&video_frame);
-    av_frame_unref(audio_frame);
-    av_frame_free(&audio_frame);
-    video_frame = audio_frame = NULL;
-    if(video_frames.size() > 0){
-        video_frame = video_frames.front();
-        video_frame_queues.pop();
-        current_pts = video_frame->pts;
-        write_rgb_frame(video_frame);
-        std::cout << "Fetch Video Frame, PTS = " << video_frame->pts << std::endl;
+bool Movie::play_video_frame(){
+    mutex.lock();
+    int next_ind = video_frame_ind + 1;
+    // end of the video
+    if(next_ind >= video_frames.size()){
+        mutex.unlock();
+        return false;
     }
-    if(audio_frame_queues.size() > 0){
-        audio_frame = audio_frame_queues.front();
-        audio_frame_queues.pop();
-        write_audio_frame(audio_frame);
-        std::cout << "Fetch Audio Frame, PTS = " << audio_frame->pts << std::endl;
+
+    double play_window = 5; // near 5 ms, play window
+    double diff_sys = (double)(QDateTime::currentDateTime().toMSecsSinceEpoch()) - base_sys_ms;
+    diff_sys = diff_sys * play_times;
+    double diff_next = video_pts_to_ms(video_frames[next_ind]->pts) - base_pts_ms;
+
+    // frame behind too much, find the first frame chaseing the sys time
+    while(diff_sys > diff_next + play_window){
+        if(++next_ind >= video_frames.size()){
+            break;
+        }
+        diff_next = video_pts_to_ms(video_frames[next_ind]->pts) - base_pts_ms;
     }
-    if(video_frame) return true;
-    else return false;
-}
 
-
-void Movie::seek_frame(int64_t target_frame){
-
-    int frame_buf_size = video_frame_queues.size();
-    int cur_frame = get_video_frame_index();
-    if(target_frame == cur_frame) return;
-
-    // target frame is inside the queues
-    if((target_frame > cur_frame) &&
-       (target_frame <= cur_frame + frame_buf_size)){
-        int diff = target_frame - cur_frame;
-        // make the target frame in the head of queue
-        while(diff > 1){
-            av_frame_unref(video_frame);
-            av_frame_free(&video_frame);
-            video_frame = video_frame_queues.front();
-            video_frame_queues.pop();
-            diff--;
-        }
-        current_pts = video_frame->pts;
-        write_rgb_frame(video_frame);
-
-        // find the nearest audio frame
-        while((audio_frame->pts < current_pts) &&
-              (audio_frame_queues.size() > 0)){
-            if(audio_frame_queues.front()->pts >= current_pts){
-                break;
-            }
-            av_frame_unref(audio_frame);
-            av_frame_free(&audio_frame);
-            audio_frame = audio_frame_queues.front();
-            audio_frame_queues.pop();
-        }
-
+    // frame forward too much, need to wait
+    if(diff_sys < diff_next){
+        Sleep(diff_next - diff_sys);
+        video_frame_ind = next_ind;
+        write_rgb_frame();
+        mutex.unlock();
+        return true;
     }
     else{
-        clear_frame_vectors(video_frames);
-        clear_frame_vectors(audio_frames);
-        // frame_index = timebase * pts * fps, av_q2d: avrational to double
-        // second = pts * timebase = frame_index / fps
-        int64_t seek_time_pts = (int64_t)(target_frame * pts_per_frame);
-        av_seek_frame(format_ctx, video_stream_index, seek_time_pts, AVSEEK_FLAG_BACKWARD);
-
-        //std::cout << "seek frame:" << target_frame << "/" << get_frame_count()
-        //          << " seek pts:" << seek_time_pts << "/" << get_max_pts() << std::endl;
-
-        avcodec_flush_buffers(codec_contexts[video_stream_index]);
-        avcodec_flush_buffers(codec_contexts[audio_stream_index]);
-
-
+        // inside the play window |diff_sys - diff_next| <= play_window, or is the last frame
+        video_frame_ind = next_ind;
+        if(video_frame_ind >= video_frames.size()){
+            video_frame_ind--;
+        }
+        write_rgb_frame();
+        mutex.unlock();
+        return true;
     }
-    return;
 }
 
 
-void Movie::write_rgb_frame(AVFrame* video_frame){
+bool Movie::play_audio_frame(){
+    mutex.lock();
+    int next_ind = audio_frame_ind + 1;
+    // end of the video
+    if(next_ind >= audio_frames.size()){
+        mutex.unlock();
+        return false;
+    }
+
+    double play_window = 5; // near 5 ms, play window
+    double diff_sys = (double)(QDateTime::currentDateTime().toMSecsSinceEpoch()) - base_sys_ms;
+    diff_sys = diff_sys * play_times;
+    double diff_next = audio_pts_to_ms(audio_frames[next_ind]->pts) - base_pts_ms;
+
+    // frame behind too much, find the first frame chaseing the sys time
+    while(diff_sys > diff_next + play_window){
+        if(++next_ind >= audio_frames.size()){
+            break;
+        }
+        diff_next = audio_pts_to_ms(audio_frames[next_ind]->pts) - base_pts_ms;
+    }
+    // frame forward too much, need to wait
+    if(diff_sys < diff_next){
+        Sleep(diff_next - diff_sys);
+        audio_frame_ind = next_ind;
+        mutex.unlock();
+        return true;
+    }
+    else{
+        // inside the play window |diff_sys - diff_next| <= play_window, or is the last frame
+        audio_frame_ind = next_ind;
+        if(audio_frame_ind >= audio_frames.size()){
+            audio_frame_ind--;
+        }
+        write_audio_frame();
+        mutex.unlock();
+        return true;
+    }
+}
+
+
+// search the nearest frame
+int Movie::search_video_frame_by_ms(double millsecs){
+    int cur_ind = video_frame_ind;
+    double cur_ms = video_pts_to_ms(video_frames[cur_ind]->pts);
+    double pre_ms = cur_ms;
+
+    if(cur_ms <= millsecs){
+        while(cur_ms <= millsecs){
+            pre_ms = cur_ms;
+            assert(++cur_ind < video_frames.size());
+            cur_ms = video_pts_to_ms(video_frames[cur_ind]->pts);
+        }
+        assert(pre_ms <= millsecs && cur_ms > millsecs);
+        //std::cout << "target:" << millsecs << " sml_ms:" << pre_ms << " big_ms:" << cur_ms << std::endl;
+        return cur_ind;
+    }
+
+    if(cur_ms > millsecs){
+        while(cur_ms > millsecs){
+            pre_ms = cur_ms;
+            assert(--cur_ind >= 0);
+            cur_ms = video_pts_to_ms(video_frames[cur_ind]->pts);
+        }
+        assert(cur_ms <= millsecs && pre_ms > millsecs);
+        //std::cout << "target:" << millsecs << " sml_ms:" << cur_ms << " big_ms:" << pre_ms << std::endl;
+        return cur_ind;
+    }
+    assert(false);
+}
+
+// search the nearest frame
+int Movie::search_audio_frame_by_ms(double millsecs){
+    int cur_ind = audio_frame_ind;
+    double cur_ms = audio_pts_to_ms(audio_frames[cur_ind]->pts);
+    double pre_ms = cur_ms;
+
+    if(cur_ms <= millsecs){
+        while(cur_ms <= millsecs){
+            pre_ms = cur_ms;
+            assert(++cur_ind < audio_frames.size());
+            cur_ms = audio_pts_to_ms(audio_frames[cur_ind]->pts);
+        }
+        assert(pre_ms <= millsecs && cur_ms > millsecs);
+        //std::cout << "target:" << millsecs << " sml_ms:" << pre_ms << " big_ms:" << cur_ms << std::endl;
+        return cur_ind;
+    }
+
+    if(cur_ms > millsecs){
+        while(cur_ms > millsecs){
+            pre_ms = cur_ms;
+            assert(--cur_ind >= 0);
+            cur_ms = audio_pts_to_ms(audio_frames[cur_ind]->pts);
+        }
+        assert(cur_ms <= millsecs && pre_ms > millsecs);
+        //std::cout << "target:" << millsecs << " sml_ms:" << cur_ms << " big_ms:" << pre_ms << std::endl;
+        return cur_ind;
+    }
+    assert(false);
+}
+
+
+
+bool Movie::seek(double millsecs){
+    mutex.lock();
+    if(video_frames.size() <= 0 || audio_frames.size() <= 0){
+        bool res = hard_seek(millsecs);
+        mutex.unlock();
+        return res;
+    }
+    double head_video_ms = video_pts_to_ms(video_frames.front()->pts);
+    double head_audio_ms = audio_pts_to_ms(audio_frames.front()->pts);
+    double tail_video_ms = video_pts_to_ms(video_frames.back()->pts);
+    double tail_audio_ms = audio_pts_to_ms(audio_frames.back()->pts);
+    double head_ms = head_video_ms > head_audio_ms ? head_video_ms : head_audio_ms;
+    double tail_ms = tail_video_ms > tail_audio_ms ? tail_audio_ms : tail_video_ms;
+
+    if(millsecs < head_ms || millsecs > tail_ms){
+        bool res = hard_seek(millsecs);
+        mutex.unlock();
+        return res;
+    }
+    // target frame is inside the vectors
+    video_frame_ind = search_video_frame_by_ms(millsecs);
+    audio_frame_ind = search_audio_frame_by_ms(millsecs);
+    first_display();
+    mutex.unlock();
+    return true;
+}
+
+
+bool Movie::hard_seek(double millsecs){
+    clear_frame_vectors(video_frames);
+    clear_frame_vectors(audio_frames);
+
+    // frame_index = timebase * pts * fps, av_q2d: avrational to double
+    // second = pts * timebase = frame_index / fps
+    int64_t seek_time_pts = (int64_t)(millsecs / 1000. / av_q2d(video_timebase));
+
+    //std::cout << "seek ms:" << millsecs << "/" << get_duration() * 1000
+    //          << " seek pts:" << seek_time_pts << std::endl;
+
+    av_seek_frame(format_ctx, video_stream_index, seek_time_pts, AVSEEK_FLAG_BACKWARD);
+
+    avcodec_flush_buffers(codec_contexts[video_stream_index]);
+    avcodec_flush_buffers(codec_contexts[audio_stream_index]);
+
+    fetch_some_packets();
+    audio_frame_ind = video_frame_ind = 0;
+    first_display();
+    return true;
+}
+
+
+void Movie::write_rgb_frame(){
+    assert(video_frame_ind >= 0 && video_frame_ind < video_frames.size());
+    AVFrame* video_frame = video_frames[video_frame_ind];
     // create a swith context, for example, AV_PIX_FMT_YUV420P to AV_PIX_FMT_RGB24
     if(sws_context == NULL){
         sws_context = sws_getContext(video_frame->width,
@@ -379,20 +536,22 @@ void Movie::write_rgb_frame(AVFrame* video_frame){
                                              AVPixelFormat(rgb_frame->format),
                                              SWS_BICUBIC, 0, 0, 0);
     }
-    std::cout << "Init Swscale" << std::endl;
+    //std::cout << "Init Swscale" << std::endl;
     // perform conversion
     sws_scale(sws_context, video_frame->data, video_frame->linesize, 0,
               video_frame->height, rgb_frame->data, rgb_frame->linesize);
 
-    std::cout << "After conversion: linesize: " << rgb_frame->linesize[0] <<
-            " width=" << rgb_frame->width <<
-            " height=" << rgb_frame->height <<
-            " format=" << rgb_frame->format << std::endl;
+    //std::cout << "After conversion: linesize: " << rgb_frame->linesize[0] <<
+    //        " width=" << rgb_frame->width <<
+    //        " height=" << rgb_frame->height <<
+    //        " format=" << rgb_frame->format << std::endl;
     return;
 }
 
 
-void Movie::write_audio_frame(AVFrame * audio_frame){
+void Movie::write_audio_frame(){
+    assert(audio_frame_ind >= 0 && audio_frame_ind < audio_frames.size());
+    AVFrame* audio_frame = audio_frames[audio_frame_ind];
     // audio resample to the format same to the qt play format
     if(swr_context == NULL){
         swr_context = swr_alloc();
@@ -425,6 +584,7 @@ void Movie::write_audio_frame(AVFrame * audio_frame){
 
 // write the rgb frame to qimage
 void Movie::write_qimage(QImage * img, int top_h, int top_w){
+    mutex.lock();
     assert((img->height() >= rgb_frame->height) &&
            (img->width() >= rgb_frame->width));
     int h, w, base;
@@ -438,13 +598,16 @@ void Movie::write_qimage(QImage * img, int top_h, int top_w){
             line_data[(top_w + w) * 3 + 2] = rgb_frame->data[0][base + 2];
         }
     }
+    mutex.unlock();
     return;
 }
 
 void Movie::write_qaudio(QIODevice * audio_io){
+    mutex.lock();
     if((audio_io != NULL) && (pcm_len > 0)){
         audio_io->write(pcm_buf, pcm_len);
     }
+    mutex.unlock();
 }
 
 int Movie::get_width(){
@@ -485,4 +648,43 @@ double Movie::audio_pts_to_ms(int64_t pts){
 
 double Movie::video_pts_to_ms(int64_t pts){
     return (double)pts * av_q2d(video_timebase) * 1000;
+}
+
+double Movie::get_video_frame_ms(){
+    mutex.lock();
+    if(video_frames.size() <= 0){
+        mutex.unlock();
+        return 0;
+    }
+    double ans = video_pts_to_ms(video_frames[video_frame_ind]->pts);
+    mutex.unlock();
+    return ans;
+}
+
+double Movie::get_audio_frame_ms(){
+    mutex.lock();
+    if(audio_frames.size() <= 0){
+        mutex.unlock();
+        return 0;
+    }
+    double ans = audio_pts_to_ms(audio_frames[audio_frame_ind]->pts);
+    mutex.unlock();
+    return ans;
+}
+
+
+void Movie::restart(){
+    mutex.lock();
+    first_display();
+    mutex.unlock();
+}
+
+
+void Movie::set_play_times(double x){
+    mutex.lock();
+    if(x >= 0.1 && x <= 5){
+        play_times = x;
+        first_display();
+    }
+    mutex.unlock();
 }

@@ -13,7 +13,6 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
-
     ui->setupUi(this);
     imglabel = new ImgLabel(this, ui->img_label_info, ui->movie_progress);
     this->adjust_size();
@@ -37,38 +36,24 @@ MainWindow::MainWindow(QWidget *parent)
     connect(fast_forward_button_group,SIGNAL(buttonClicked(int)), this, SLOT(fast_forward_clicked(int)));
     int info_w = 100;
 
-    // fast forward for frame
-    QLabel* frame_fast_forward_info = new QLabel(this);
-    frame_fast_forward_info->setText("ControlFrame:");
-    frame_fast_forward_info->setGeometry(10, 100 + h, info_w, 20);
-    // add button
-    int avg_w = (w - info_w) / fast_forward_count;
-    for(int i = 0; i < fast_forward_count; i++){
-        QPushButton * btn = new QPushButton(this);
-        int val = fast_forward_cands[i];
-        QString ss = val > 0 ? QString("+%1").arg(val) : QString("%1").arg(val);
-        btn->setText(ss);
-        btn->setGeometry(info_w + avg_w * i, 100 + h, avg_w, 20);
-        fast_forward_button_group->addButton(btn, i);
-    }
-
     // fast forward for second
     QLabel* second_fast_forward_info = new QLabel(this);
     second_fast_forward_info->setText("ControlSecond:");
     second_fast_forward_info->setGeometry(10, 120 + h, info_w, 20);
+    int avg_w = (w - info_w) / fast_forward_count;
     // add button
     for(int i = 0; i < fast_forward_count; i++){
         QPushButton * btn = new QPushButton(this);
-        int val = fast_forward_cands[i];
-        QString ss = val > 0 ? QString("+%1").arg(val) : QString("%1").arg(val);
+        double val = fast_forward_cands[i];
+        QString ss = val > 0 ? QString("+%1 s").arg(val) : QString("%1 s").arg(val);
         btn->setText(ss);
         btn->setGeometry(info_w + avg_w * i, 120 + h, avg_w, 20);
-        fast_forward_button_group->addButton(btn, i + fast_forward_count);
+        fast_forward_button_group->addButton(btn, i);
     }
 
     //for debug
-    std::string path = "E:/QT/videos/S2-P5-160912.mp4";
-    imglabel->set_movie(path);
+    //std::string path = "E:/QT/videos/S2-P5-160912.mp4";
+    //imglabel->set_movie(path);
 }
 
 void MainWindow::adjust_size(){
@@ -109,16 +94,12 @@ void MainWindow::play_times_changed(){
 
 void MainWindow::on_jump_frame_clicked(){
     QString val = ui->jump_frame_text->text();
-    if(val.contains(QRegExp("^\\d+$"))){
-        imglabel->set_frame(val.toInt());
+    if(val.contains(QRegExp("^\\d+\.*\\d*$"))){
+        imglabel->set_second(val.toDouble() * 1000);
     }
 }
 
 void MainWindow::fast_forward_clicked(int index){
-    if(index < fast_forward_count){
-        this->imglabel->fast_forward_frame(fast_forward_cands[index]);
-    }
-    else{
-        this->imglabel->fast_forward_second((double)fast_forward_cands[index - fast_forward_count]);
-    }
+    assert(index < fast_forward_count);
+    this->imglabel->fast_forward_second(fast_forward_cands[index]);
 }

@@ -16,13 +16,7 @@ ImgLabel::~ImgLabel(){
     if(this->image != NULL){
         delete this->image;
     }
-    delete movie;
-}
-
-double ImgLabel::get_system_time(){
-    timeb t;
-    ftime(&t);
-    return (double)(t.time * 1000 + t.millitm) / 1000.0;
+    clear_movie();
 }
 
 void ImgLabel::init_qimage(QImage * img, int H, int W){
@@ -45,12 +39,12 @@ void ImgLabel::set_movie(std::string path){
     this->movie = new Movie();
     this->movie->init(path);
 
+    // init qimage
     int h = movie->get_height();
     int w = movie->get_width();
 
     double ratio_h = (double)H / h;
     double ratio_w = (double)W / w;
-    //double ratio = std::min(ratio_h, ratio_w);
     double ratio = ratio_h > ratio_w ? ratio_w : ratio_h;
 
     this->image_h = (int)(h * ratio);
@@ -66,7 +60,7 @@ void ImgLabel::set_movie(std::string path){
     init_qimage(this->image, H, W);
     this->movie->init_rgb_frame(image_h, image_w);
 
-    // init the audio
+    // init the qaudio
     QAudioFormat audio_fmt;
     audio_fmt.setSampleRate(audio_play_sample_rate);
     audio_fmt.setSampleSize(audio_play_sample_size);
@@ -77,26 +71,31 @@ void ImgLabel::set_movie(std::string path){
     audio_output = new QAudioOutput(audio_fmt);
     audio_io = audio_output->start();
 
-
-    // start the fetch frame thread
-    fetch_frame_thread = new FetchFrameThread(this);
-    fetch_frame_thread->set_movie(this->movie);
-    fetch_frame_thread->start();
-
     // init the progress slider
-    movie_duration = movie->get_video_duration();
-    movie_fps = movie->get_fps();
-    movie_frame_count = movie->get_frame_count();
+    movie_duration = movie->get_duration() * 1000; // ms
+    movie_fps = movie->get_video_fps();
     this->progress->setMinimum(0);
-    this->progress->setMaximum(movie_frame_count);
-    std::cout << "Slider Max: " << movie_frame_count << std::endl;
+    this->progress->setMaximum((long long)(movie_duration));
+    std::cout << "Slider Max: " << (long long)(movie_duration) << std::endl;
 
     // sliderPressed(), sliderReleased(), sliderMoved(int), valueChanged(int)
     connect(this->progress, SIGNAL(sliderPressed()), this, SLOT(set_progress_start()));
     connect(this->progress, SIGNAL(sliderReleased()), this, SLOT(set_progress_end()));
     connect(this->progress, SIGNAL(valueChanged(int)), this, SLOT(progress_change()));
 
-    //display_next_frame();
+    // play signal connect
+    fetch_frame_thread = new FetchFrameThread(this);
+    fetch_frame_thread->set_movie(movie);
+
+    play_video_thread = new PlayVideoThread(this);
+    play_video_thread->set_movie(movie);
+    connect(play_video_thread, SIGNAL(play_one_frame_over()), this, SLOT(update_image()));
+
+    play_audio_thread = new PlayAudioThread(this);
+    play_audio_thread->set_movie(movie);
+    connect(play_audio_thread, SIGNAL(play_one_frame_over()), this, SLOT(update_audio()));
+
+    fetch_frame_thread->start();
 }
 
 void ImgLabel::clear_movie(){
@@ -110,26 +109,39 @@ void ImgLabel::clear_movie(){
         audio_output->bytesFree();
         delete audio_output;
     }
-    if(this->fetch_frame_thread){
-        this->fetch_frame_thread->quit();
-        this->fetch_frame_thread->wait();
-        delete this->fetch_frame_thread;
+    if(fetch_frame_thread){
+        fetch_frame_thread->quit();
+        fetch_frame_thread->wait();
+        delete fetch_frame_thread;
+    }
+    if(play_video_thread){
+        play_video_thread->quit();
+        play_video_thread->wait();
+        delete play_video_thread;
+    }
+    if(play_audio_thread){
+        play_audio_thread->quit();
+        play_audio_thread->wait();
+        delete play_audio_thread;
     }
 }
 
-bool ImgLabel::display_next_frame(){
-    if((this->movie) && (this->movie->next_frame())){
-        this->movie->write_qimage(image, top_h, top_w);
-        this->setPixmap(QPixmap::fromImage(*(this->image)));
-
-        this->movie->write_qaudio(audio_io);
-
-        int ind = this->movie->get_video_frame_index();
-        this->progress->setValue(ind);
-        return true;
-    }
-    else return false;
+void ImgLabel::update_image(){
+    this->movie->write_qimage(image, top_h, top_w);
+    this->setPixmap(QPixmap::fromImage(*(this->image)));
+    double stamp = this->movie->get_video_frame_ms();
+    this->progress->setValue((long long)stamp);
+    this->update();
 }
+
+
+void ImgLabel::update_audio(){
+    this->movie->write_qaudio(audio_io);
+    double stamp = this->movie->get_audio_frame_ms();
+    this->progress->setValue((long long)stamp);
+    this->update();
+}
+
 
 std::string ImgLabel::format_time(double second){
     int int_second = (int)second;
@@ -145,75 +157,48 @@ std::string ImgLabel::format_time(double second){
     return str;
 }
 
-// seek the key frame that near the target frame index
-int64_t ImgLabel::seek_almost(int64_t target_frame){
-    this->movie->seek_frame(target_frame);
-    display_next_frame();
-    int ind = movie->get_video_frame_index();
-    assert(abs(target_frame - ind) <= 300);
-    return ind;
-}
-
-int ImgLabel::forward_until(int ind, int64_t target_frame){
-    assert(ind <= target_frame);
-    // found key frame with the smaller frame index
-    while((ind < target_frame) && (display_next_frame())){
-        ind = movie->get_video_frame_index();
-    }
-    if(ind < target_frame){
-        std::cout << "Warning: Real Max Frame Index = " << ind << std::endl;
-    }
-    return ind;
-}
-
-// accurate jump, may cost much
-int ImgLabel::jump_to_frame(int64_t target_frame){
-    int tmp_target_frame = target_frame;
-    int ind = seek_almost(tmp_target_frame);
-
-    // found key frame with the bigger frame index
-    while(ind > target_frame){
-        std::cout << "Warning: Seek Key Frame = " << ind << " > Target Frame:" << target_frame << std::endl;
-        tmp_target_frame = tmp_target_frame < 50 ? 0 : tmp_target_frame - 50;
-        ind = seek_almost(tmp_target_frame);
-    }
-    ind = forward_until(ind, target_frame);
-    std::cout << "Seek Frame: Target=" << target_frame << ", Real=" << ind << std::endl;
-    return ind;
-}
-
 void ImgLabel::set_progress_start(){
     display_lock = true;
 }
 
 void ImgLabel::set_progress_end(){
-    int64_t target_frame = this->progress->value();
-    //jump_to_frame(target_frame);
-    seek_almost(target_frame);
-    display_lock = false;
+    double target_ms = (double)(this->progress->value());
+    set_second(target_ms);
+    //display_lock = false;
 }
 
 void ImgLabel::progress_change(){
-    int64_t target_frame = this->progress->value();
-    double show_stamp = (double)target_frame / movie_fps;
-    this->info->setText(QString::fromStdString(format_time(show_stamp)) + " / " +
-                        QString::fromStdString(format_time(movie_duration)) + " " +
-                        QString("Frame[%1 / %2]").arg(target_frame).arg(movie_frame_count));
+    double cur_secs = double(this->progress->value()) / 1000;
+    double all_secs = movie_duration / 1000;
+    this->info->setText(QString::fromStdString(format_time(cur_secs)) + " / " +
+                        QString::fromStdString(format_time(all_secs)) + " [" +
+                        QString("%1 / %2]").arg(cur_secs).arg(all_secs)
+                        );
     return;
 }
 
 void ImgLabel::play(){
     on_play = true;
+    this->movie->restart();
+    audio_output->resume();
+    //fetch_frame_thread->resume();
+    play_video_thread->resume();
+    play_audio_thread->resume();
     this->update();
 }
 
 void ImgLabel::pause(){
     on_play = false;
+    audio_output->suspend();
+    //fetch_frame_thread->pause();
+    play_video_thread->pause();
+    play_audio_thread->pause();
     this->update();
 }
 
 void ImgLabel::set_play_times(double x){
     this->play_times = x;
+    this->movie->set_play_times(x);
 }
 
 int ImgLabel::get_H(){
@@ -224,42 +209,30 @@ int ImgLabel::get_W(){
     return this->W;
 }
 
-void ImgLabel::set_frame(int frame_index){
-    if(frame_index < 0 || frame_index > movie_frame_count) return;
-    display_lock = true;
-    jump_to_frame(frame_index);
-    display_lock = false;
-}
-
-void ImgLabel::fast_forward_frame(int delta){
-    int ind = this->movie->get_video_frame_index();
-    int target_frame = ind + delta;
-    target_frame = target_frame < 0 ? 0 : target_frame;
-    target_frame = target_frame > movie_frame_count ? movie_frame_count : target_frame;
-    display_lock = true;
-
-    // frame and second is big, rough seek
-    if(abs(delta) > 200){
-        ind = seek_almost(target_frame);
-    }
-    // only forward, is fast
-    else if(delta > 0){
-        ind = forward_until(ind, target_frame);
-    }
-    // may cost much
-    else if(delta < 0){
-        ind = jump_to_frame(target_frame);
-    }
-    std::cout << "Fast Forward Frame" << delta <<": Target="
-              << target_frame << ", Real=" << ind << std::endl;
-    display_lock = false;
-    return;
-}
-
 void ImgLabel::fast_forward_second(double delta){
-    int64_t delta_frame = (int64_t)(delta * movie_fps + 0.5);
-    fast_forward_frame(delta_frame);
-    return;
+    double target_ms = (double)(this->progress->value()) + delta * 1000;
+    set_second(target_ms);
+}
+
+void ImgLabel::set_second(double target_ms){
+    if(target_ms < 0 || target_ms > movie_duration){
+        return;
+    }
+    display_lock = true;
+    if(on_play){
+        //fetch_frame_thread->pause();
+        play_video_thread->pause();
+        play_audio_thread->pause();
+    }
+    this->movie->seek(target_ms);
+    update_image();
+    update_audio();
+    if(on_play){
+        //fetch_frame_thread->resume();
+        play_video_thread->resume();
+        play_audio_thread->resume();
+    }
+    display_lock = false;
 }
 
 void ImgLabel::mouseMoveEvent(QMouseEvent *event){
@@ -276,17 +249,9 @@ void ImgLabel::mouseReleaseEvent(QMouseEvent *event){
 
 void ImgLabel::paintEvent(QPaintEvent *event){
     QLabel::paintEvent(event);
-
-
-    if(!display_lock && on_play){
-        timeb t1, t2;
-        ftime(&t1);
-        display_next_frame();
-        ftime(&t2);
-        double dt = (double)(t2.time - t1.time) * 1000 + (double)(t2.millitm - t1.millitm);
-        double sleep_dt = 900.0 / movie_fps / play_times - dt;
-        sleep_dt = sleep_dt < 0 ? 0 : sleep_dt;
-        Sleep(sleep_dt);
+    if(!display_lock && fetch_frame_thread && play_video_thread && play_audio_thread){
+        //fetch_frame_thread->start();
+        play_video_thread->start();
+        play_audio_thread->start();
     }
-
 }

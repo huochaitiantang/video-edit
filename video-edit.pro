@@ -21,8 +21,7 @@ SOURCES += \
     src/movie.cpp \
     src/imglabel.cpp \
     src/main.cpp \
-    src/mainwindow.cpp \
-    src/moc_imglabel.cpp
+    src/mainwindow.cpp
 
 INCLUDEPATH += E:\ffmpeg-dev\include
 INCLUDEPATH += include\

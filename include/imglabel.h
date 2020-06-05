@@ -34,7 +34,6 @@ class ImgLabel : public QLabel
         bool display_lock = false;
         bool on_play = true;
         double movie_duration;
-        double movie_fps;
         double play_times = 1.0;
 
         QAudioOutput *audio_output = NULL;

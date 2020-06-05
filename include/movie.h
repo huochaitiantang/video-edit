@@ -33,7 +33,8 @@ class Movie
 private:
     std::string movie_name = "";
     int height, width;
-    AVRational video_fps, video_timebase, audio_timebase;
+    AVRational video_timebase, audio_timebase;
+    double audio_fps = 0, video_fps = 0;
     double duration;
     int audio_sample_rate = 48000;
     int audio_sample_size = 16;
@@ -59,13 +60,19 @@ private:
     int video_frame_ind = 0;
     int audio_frame_ind = 0;
 
-    double base_sys_ms;
-    double base_pts_ms;
+    //double base_sys_ms;
+    //double base_pts_ms;
+    double last_video_sys, last_video_pts;
+    double last_audio_sys, last_audio_pts;
 
     QMutex mutex;
     char *pcm_buf = new char[48000];
     int pcm_len = 0;
     double play_times = 1.0;
+
+     // buffer the frame near 3 second, play window 5 ms
+    double radius_ms = 3000, play_window = 5;
+    int video_buf_len = 0, audio_buf_len = 0;
 
     void clear_frame_vectors(std::vector<AVFrame*> &vs);
 
@@ -77,14 +84,18 @@ private:
 
     double audio_pts_to_ms(int64_t pts);
     double video_pts_to_ms(int64_t pts);
+    double pts_to_ms(int64_t pts, AVRational timebase);
 
     void decode_one_packet();
-    bool fetch_some_packets();
+    bool fetch_some_packets(int packet_num);
 
-    void first_display();
+    //void first_display();
     int search_video_frame_by_ms(double millsecs);
     int search_audio_frame_by_ms(double millsecs);
+    int binary_search(double millsecs, std::vector<AVFrame*> frames, AVRational timebase);
     bool hard_seek(double millsecs);
+
+    double current_sys_ms();
 
 public:
     Movie();
@@ -113,9 +124,7 @@ public:
     double get_audio_frame_ms();
 
     bool seek(double millsecs);
-
-    void adjust_video_frames();
-    void adjust_audio_frames();
+    void fetch_frames();
     void restart();
     void set_play_times(double x);
 

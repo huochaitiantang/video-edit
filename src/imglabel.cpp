@@ -74,7 +74,6 @@ void ImgLabel::set_movie(std::string path){
 
     // init the progress slider
     movie_duration = movie->get_duration() * 1000; // ms
-    movie_fps = movie->get_video_fps();
     this->progress->setMinimum(0);
     this->progress->setMaximum((long long)(movie_duration));
     std::cout << "Slider Max: " << (long long)(movie_duration) << std::endl;
@@ -97,7 +96,6 @@ void ImgLabel::set_movie(std::string path){
     connect(play_audio_thread, SIGNAL(play_one_frame_over()), this, SLOT(update_audio()));
 
     update_image();
-    update_audio();
 }
 
 void ImgLabel::clear_movie(){
@@ -171,7 +169,7 @@ void ImgLabel::set_progress_start(){
 void ImgLabel::set_progress_end(){
     double target_ms = (double)(this->progress->value());
     set_second(target_ms);
-    //display_lock = false;
+    display_lock = false;
 }
 
 void ImgLabel::progress_change(){
@@ -231,15 +229,12 @@ void ImgLabel::set_second(double target_ms){
     }
     display_lock = true;
     if(on_play){
-        //fetch_frame_thread->pause();
         play_video_thread->pause();
         play_audio_thread->pause();
     }
     this->movie->seek(target_ms);
     update_image();
-    update_audio();
     if(on_play){
-        //fetch_frame_thread->resume();
         play_video_thread->resume();
         play_audio_thread->resume();
     }
@@ -260,6 +255,7 @@ void ImgLabel::mouseReleaseEvent(QMouseEvent *event){
 
 void ImgLabel::paintEvent(QPaintEvent *event){
     QLabel::paintEvent(event);
+
     if(fetch_frame_thread){
         fetch_frame_thread->start();
     }

@@ -41,10 +41,8 @@ void PlayAudioThread::set_movie(Movie *m){
 void FetchFrameThread::run(){
     if(this->movie){
         mutex.lock();
-        this->movie->adjust_audio_frames();
-        this->movie->adjust_video_frames();
+        this->movie->fetch_frames();
         mutex.unlock();
-        Sleep(5);
     }
 }
 

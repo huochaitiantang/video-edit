@@ -33,8 +33,7 @@ HEADERS += \
     include/fetchframethread.h \
     include/imglabel.h \
     include/mainwindow.h \
-    include/movie.h \
-    include/fetchframethread.h
+    include/movie.h
 
 FORMS += \
     ui/mainwindow.ui

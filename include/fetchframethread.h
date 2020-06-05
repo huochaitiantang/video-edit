@@ -1,8 +1,6 @@
 #ifndef FETCHFRAMETHREAD_H
 #define FETCHFRAMETHREAD_H
 
-#endif // FETCHFRAMETHREAD_H
-
 #include<QThread>
 #include<movie.h>
 
@@ -72,4 +70,6 @@ signals:
     void play_one_frame_over();
 
 };
+
+#endif // FETCHFRAMETHREAD_H
 

@@ -61,7 +61,6 @@ void ImgLabel::set_movie(std::string path){
     this->movie->init_rgb_frame(image_h, image_w);
 
     // init the qaudio
-    QAudioFormat audio_fmt;
     audio_fmt.setSampleRate(movie->get_audio_sample_rate());
     audio_fmt.setSampleSize(16);
     audio_fmt.setChannelCount(movie->get_audio_sample_channel());
@@ -184,8 +183,8 @@ void ImgLabel::progress_change(){
 
 void ImgLabel::play(){
     on_play = true;
+    if(!movie) return;
     this->movie->restart();
-
     if(first_play_click != true){
         audio_output->resume();
         play_video_thread->resume();
@@ -198,6 +197,7 @@ void ImgLabel::play(){
 }
 
 void ImgLabel::pause(){
+    if(!movie) return;
     on_play = false;
     audio_output->suspend();
     play_video_thread->pause();
@@ -206,7 +206,13 @@ void ImgLabel::pause(){
 }
 
 void ImgLabel::set_play_times(double x){
-    this->play_times = x;
+    if(!movie || x <= 0.1 || x > 5) return;
+    if(x < 1){
+        audio_fmt.setSampleRate(movie->get_audio_sample_rate() * x);
+    }
+    else{
+        audio_fmt.setSampleRate(movie->get_audio_sample_rate());
+    }
     this->movie->set_play_times(x);
 }
 
@@ -224,7 +230,7 @@ void ImgLabel::fast_forward_second(double delta){
 }
 
 void ImgLabel::set_second(double target_ms){
-    if(target_ms < 0 || target_ms > movie_duration){
+    if(!movie || target_ms < 0 || target_ms > movie_duration){
         return;
     }
     display_lock = true;

@@ -34,10 +34,10 @@ class ImgLabel : public QLabel
         bool display_lock = false;
         bool on_play = true;
         double movie_duration;
-        double play_times = 1.0;
 
         QAudioOutput *audio_output = NULL;
         QIODevice *audio_io = NULL;
+        QAudioFormat audio_fmt;
 
         FetchFrameThread* fetch_frame_thread = NULL;
         PlayVideoThread* play_video_thread = NULL;
@@ -48,6 +48,7 @@ class ImgLabel : public QLabel
         void clear_movie();
         std::string format_time(double second);
         void init_qimage(QImage * img, int H, int W);
+
 
     private slots:
         void set_progress_start();

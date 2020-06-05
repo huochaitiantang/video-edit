@@ -270,9 +270,9 @@ bool Movie::play_video_frame(){
 
     // show current frame
     if(last_video_sys < 0){
+         write_rgb_frame();
         last_video_sys = current_sys_ms();
         last_video_pts = video_pts_to_ms(video_frames[video_frame_ind]->pts);
-        write_rgb_frame();
         mutex.unlock();
         return true;
     }
@@ -285,9 +285,9 @@ bool Movie::play_video_frame(){
         int ind = binary_search(last_audio_pts, video_frames, video_timebase);
         if(ind >= 0){
             video_frame_ind = ind;
+            write_rgb_frame();
             last_video_sys = current_sys_ms();
             last_video_pts = video_pts_to_ms(video_frames[video_frame_ind]->pts);
-            write_rgb_frame();
             mutex.unlock();
             return true;
         }
@@ -360,9 +360,9 @@ bool Movie::play_audio_frame(){
 
     // show current frame
     if(last_audio_sys < 0){
-        write_audio_frame();
         last_audio_sys = current_sys_ms();
         last_audio_pts = audio_pts_to_ms(audio_frames[audio_frame_ind]->pts);
+        write_audio_frame();
         mutex.unlock();
         return true;
     }

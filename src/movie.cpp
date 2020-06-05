@@ -190,8 +190,8 @@ void Movie::init_rgb_frame(int h, int w){
     assert(av_frame_get_buffer(rgb_frame, 0) >= 0);
 
     // first image display
-    fetch_some_packets(50);
     audio_frame_ind = video_frame_ind = 0;
+    fetch_some_packets(50);
     last_audio_pts = last_video_pts = -1;
     last_audio_sys = last_video_sys = -1;
     write_rgb_frame();
@@ -295,16 +295,17 @@ bool Movie::play_video_frame(){
             // video forward too much, need to wait
             double head_video_pts = pts_to_ms(video_frames.front()->pts, video_timebase);
             if(last_audio_pts <= head_video_pts){
+                std::cout << "Warning: Sync Bad Video Forward Too Much, Wait" << std::endl;
                 video_frame_ind = 0;
                 last_video_pts = last_video_sys = -1;
                 mutex.unlock();
                 Sleep(head_video_pts - last_audio_pts);
-                mutex.lock();
                 return false;
             }
             // video behind too much, need to clear the buf
             double tail_video_pts = pts_to_ms(video_frames.back()->pts, video_timebase);
             if(last_audio_pts >= tail_video_pts){
+                std::cout << "Warning: Sync Bad Video Forward Too Much, Clear" << std::endl;
                 clear_frame_vectors(video_frames);
                 video_frame_ind = 0;
                 last_video_pts = last_video_sys = -1;
@@ -333,9 +334,9 @@ bool Movie::play_video_frame(){
 
     double cur_pts = video_pts_to_ms(video_frames[next_ind]->pts);
     double cur_sys = current_sys_ms();
-    double diff_sys = (cur_sys - last_video_sys) * play_times;
-    double diff_pts = cur_pts - last_video_pts;
-    double sleep_dt = diff_pts - diff_sys;
+    double diff_sys = (cur_sys - last_video_sys);
+    double diff_pts = (cur_pts - last_video_pts) / play_times;
+    double sleep_dt = (diff_pts - diff_sys);
 
     video_frame_ind = next_ind;
     write_rgb_frame();
@@ -384,9 +385,9 @@ bool Movie::play_audio_frame(){
 
     double cur_pts = audio_pts_to_ms(audio_frames[next_ind]->pts);
     double cur_sys = current_sys_ms();
-    double diff_sys = (cur_sys - last_audio_sys) * play_times;
-    double diff_pts = cur_pts - last_audio_pts;
-    double sleep_dt = diff_pts - diff_sys;
+    double diff_sys = (cur_sys - last_audio_sys);
+    double diff_pts = (cur_pts - last_audio_pts) / play_times;
+    double sleep_dt = (diff_pts - diff_sys);
 
     audio_frame_ind = next_ind;
     write_audio_frame();
@@ -532,8 +533,8 @@ bool Movie::hard_seek(double millsecs){
     avcodec_flush_buffers(codec_contexts[video_stream_index]);
     avcodec_flush_buffers(codec_contexts[audio_stream_index]);
 
-    fetch_some_packets(50);
     audio_frame_ind = video_frame_ind = 0;
+    fetch_some_packets(50);
     last_audio_pts = last_video_pts = -1;
     last_audio_sys = last_video_sys = -1;
     write_rgb_frame();

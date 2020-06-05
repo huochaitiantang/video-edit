@@ -120,7 +120,7 @@ void Movie::parse_audio_codec(int stream_ind, AVCodecParameters* codec_parameter
     audio_sample_rate = audio_codec_ctx->sample_rate;
     audio_channel = audio_codec_ctx->channels;
     audio_layout_channel = audio_codec_ctx->channel_layout;
-    audio_fps = audio_sample_rate / (double)(audio_codec_ctx->frame_size);
+    audio_fps = audio_codec_ctx->frame_size >0 ? audio_sample_rate / (double)(audio_codec_ctx->frame_size) : 100;
 
     switch(audio_codec_ctx->sample_fmt){
         case AV_SAMPLE_FMT_S16:
@@ -163,9 +163,6 @@ void Movie::init(std::string path){
         }
         else if(codec_parameters->codec_type == AVMEDIA_TYPE_AUDIO){
             parse_audio_codec(i, codec_parameters);
-        }
-        else{
-            assert(false);
         }
     }
     video_buf_len = min(300, max(0, (int)(radius_ms * video_fps / 1000)));

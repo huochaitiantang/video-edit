@@ -43,25 +43,27 @@ private:
 
     AVFormatContext * format_ctx;
     AVFrame * rgb_frame = NULL;
-    AVFrame * frame = NULL;
     AVPacket * packet = NULL;
     SwsContext* sws_context = NULL;
     SwrContext* swr_context = NULL;
 
     int n_streams = 0;
+    std::vector<AVMediaType> stream_types;
+
     std::vector<int> video_stream_indexs;
     std::vector<int> audio_stream_indexs;
+    std::vector<int> subtitle_stream_indexs;
+
     int video_stream_index;
     int audio_stream_index;
-    std::vector<AVCodec*> codecs;
+    int subtitle_stream_index;
+
     std::vector<AVCodecContext*> codec_contexts;
     std::vector<AVFrame*> video_frames;
     std::vector<AVFrame*> audio_frames;
     int video_frame_ind = 0;
     int audio_frame_ind = 0;
 
-    //double base_sys_ms;
-    //double base_pts_ms;
     double last_video_sys, last_video_pts;
     double last_audio_sys, last_audio_pts;
 
@@ -75,27 +77,19 @@ private:
     int video_buf_len = 0, audio_buf_len = 0;
 
     void clear_frame_vectors(std::vector<AVFrame*> &vs);
-
-    void parse_video_codec(int stream_ind, AVCodecParameters* codec_parameters);
-    void parse_audio_codec(int stream_ind, AVCodecParameters* codec_parameters);
+    void parse_codec(int stream_ind, AVCodecParameters* codec_parameters);
 
     void write_rgb_frame();
     void write_audio_frame();
-
-    double audio_pts_to_ms(int64_t pts);
-    double video_pts_to_ms(int64_t pts);
     double pts_to_ms(int64_t pts, AVRational timebase);
 
     void decode_one_packet();
     bool fetch_some_packets(int packet_num);
 
-    //void first_display();
-    int search_video_frame_by_ms(double millsecs);
-    int search_audio_frame_by_ms(double millsecs);
     int binary_search(double millsecs, std::vector<AVFrame*> frames, AVRational timebase);
     bool hard_seek(double millsecs);
-
     double current_sys_ms();
+
 
 public:
     Movie();
@@ -127,6 +121,8 @@ public:
     void fetch_frames();
     void restart();
     void set_play_times(double x);
+    void set_video_codec(int stream_ind);
+    void set_audio_codec(int stream_ind);
 
 };
 

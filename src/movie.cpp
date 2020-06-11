@@ -9,10 +9,8 @@ Movie::Movie()
 {
     mutex.lock();
     format_ctx = avformat_alloc_context();
-    frame = av_frame_alloc();
     rgb_frame = av_frame_alloc();
     packet = av_packet_alloc();
-    assert(frame && rgb_frame && packet);
     mutex.unlock();
 }
 
@@ -37,8 +35,6 @@ Movie::~Movie()
 
     av_packet_unref(packet);
     av_packet_free(&packet);
-    av_frame_unref(frame);
-    av_frame_free(&frame);
     av_frame_unref(rgb_frame);
     av_frame_free(&rgb_frame);
 
@@ -56,73 +52,34 @@ void Movie::clear_frame_vectors(std::vector<AVFrame*>& vs){
     }
 }
 
-void Movie::parse_video_codec(int stream_ind, AVCodecParameters* codec_parameters){
-    assert(codec_parameters->codec_type == AVMEDIA_TYPE_VIDEO);
-
-    // init video infomation
-    height = codec_parameters->height;
-    width = codec_parameters->width;
-    video_fps = av_q2d(this->format_ctx->streams[stream_ind]->avg_frame_rate);
-    video_timebase = this->format_ctx->streams[stream_ind]->time_base;
-
-    // finds the registered decoder for a codec ID
-    AVCodec* video_codec = avcodec_find_decoder(codec_parameters->codec_id);
-    assert(video_codec);
-
-    // find the codec ctx
-    AVCodecContext* video_codec_ctx = avcodec_alloc_context3(video_codec);
-    assert(video_codec_ctx);
-
-    // Fill the codec context based on the values from the supplied codec parameters
-    assert(avcodec_parameters_to_context(video_codec_ctx, codec_parameters) >= 0);
-
-    // Initialize the AVCodecContext to use the given AVCodec.
-    assert(avcodec_open2(video_codec_ctx, video_codec, NULL) >= 0);
-
-    assert(codecs.size() == stream_ind);
-    codecs.push_back(video_codec);
-    codec_contexts.push_back(video_codec_ctx);
-    video_stream_indexs.push_back(stream_ind);
-    // only focus the last video stream
+void Movie::set_video_codec(int stream_ind){
+    assert(stream_types[stream_ind] == AVMEDIA_TYPE_VIDEO);
+    // set video infomation
     video_stream_index = stream_ind;
+    height = format_ctx->streams[stream_ind]->codecpar->height;
+    width = format_ctx->streams[stream_ind]->codecpar->width;
+    video_fps = av_q2d(format_ctx->streams[stream_ind]->avg_frame_rate);
+    video_timebase = format_ctx->streams[stream_ind]->time_base;
+    video_buf_len = min(300, max(0, (int)(radius_ms * video_fps / 1000)));
 
-    std::cout << "Video parameters init:" <<
-                 " fps=" << video_fps <<
-                 " timebase=" << video_timebase.num << "/" << video_timebase.den <<
-                 " height=" << height << " width=" << width << std::endl;
+    std::cout << "Video Codec Set: fps=" << video_fps << " video_buf:" << video_buf_len
+              << " timebase=" << video_timebase.num << "/" << video_timebase.den
+              << " height=" << height << " width=" << width << std::endl;
     return;
 }
 
-void Movie::parse_audio_codec(int stream_ind, AVCodecParameters* codec_parameters){
-    assert(codec_parameters->codec_type == AVMEDIA_TYPE_AUDIO);
-
-    // finds the registered decoder for a codec ID
-    AVCodec* audio_codec = avcodec_find_decoder(codec_parameters->codec_id);
-
-    // find the codec ctx
-    AVCodecContext* audio_codec_ctx = avcodec_alloc_context3(audio_codec);
-    assert(audio_codec_ctx);
-
-    // Fill the codec context based on the values from the supplied codec parameters
-    assert(avcodec_parameters_to_context(audio_codec_ctx, codec_parameters) >= 0);
-
-    // Initialize the AVCodecContext to use the given AVCodec.
-    assert(avcodec_open2(audio_codec_ctx, audio_codec, NULL) >= 0);
-
-    assert(codecs.size() == stream_ind);
-    codecs.push_back(audio_codec);
-    codec_contexts.push_back(audio_codec_ctx);
-    audio_stream_indexs.push_back(stream_ind);
-    // only focus on the last audio stream
+void Movie::set_audio_codec(int stream_ind){
+    assert(stream_types[stream_ind] == AVMEDIA_TYPE_AUDIO);
+    //set audio infomation
     audio_stream_index = stream_ind;
-
     audio_timebase = this->format_ctx->streams[stream_ind]->time_base;
-    audio_sample_rate = audio_codec_ctx->sample_rate;
-    audio_channel = audio_codec_ctx->channels;
-    audio_layout_channel = audio_codec_ctx->channel_layout;
-    audio_fps = audio_codec_ctx->frame_size >0 ? audio_sample_rate / (double)(audio_codec_ctx->frame_size) : 100;
+    audio_sample_rate = codec_contexts[stream_ind]->sample_rate;
+    audio_channel = codec_contexts[stream_ind]->channels;
+    audio_layout_channel = codec_contexts[stream_ind]->channel_layout;
+    audio_fps = codec_contexts[stream_ind]->frame_size > 0 ?
+                audio_sample_rate / (double)(codec_contexts[stream_ind]->frame_size) : 100;
 
-    switch(audio_codec_ctx->sample_fmt){
+    switch(codec_contexts[stream_ind]->sample_fmt){
         case AV_SAMPLE_FMT_S16:
             audio_sample_size = 16;
             break;
@@ -135,46 +92,76 @@ void Movie::parse_audio_codec(int stream_ind, AVCodecParameters* codec_parameter
         default:
             break;
     }
+    audio_buf_len = min(300, max(0, (int)(radius_ms * audio_fps / 1000)));
 
-    std::cout << "Audio parameters init:" <<
-                 " audio_timebase" << audio_timebase.num << "/" << audio_timebase.den <<
-                 " sample_rate:" << audio_sample_rate <<
-                 " audio_fps:" << audio_fps <<
-                 " sample_channel:" << audio_channel <<
-                 " layout_channel:" << audio_layout_channel <<
-                 " sample_size:" << audio_sample_size << std::endl;
+    std::cout << "Audio Codec Set: audio_fps:" << audio_fps << " audio_buf:" << audio_buf_len
+              << " audio_timebase" << audio_timebase.num << "/" << audio_timebase.den
+              << " sample_rate:" << audio_sample_rate << " sample_channel:" << audio_channel
+              << " layout_channel:" << audio_layout_channel << " sample_size:" << audio_sample_size << std::endl;
     return;
+}
+
+void Movie::parse_codec(int stream_ind, AVCodecParameters* codec_parameters){
+    AVMediaType media_type = codec_parameters->codec_type;
+    assert(stream_types.size() == stream_ind);
+    stream_types.push_back(media_type);
+    std::cout << "Parse Stream [" << stream_ind << "] :"
+              << av_get_media_type_string(media_type) << std::endl;
+
+    if(media_type == AVMEDIA_TYPE_VIDEO){
+        video_stream_indexs.push_back(stream_ind);
+    }
+    else if(media_type == AVMEDIA_TYPE_AUDIO){
+        audio_stream_indexs.push_back(stream_ind);
+    }
+    else if(media_type == AVMEDIA_TYPE_SUBTITLE){
+        subtitle_stream_indexs.push_back(stream_ind);
+    }
+
+    // finds the registered decoder for a codec ID
+    AVCodec* codec = avcodec_find_decoder(codec_parameters->codec_id);
+
+    // find the codec ctx
+    AVCodecContext* codec_ctx = avcodec_alloc_context3(codec);
+    assert(codec_ctx);
+
+    // Fill the codec context based on the values from the supplied codec parameters
+    assert(avcodec_parameters_to_context(codec_ctx, codec_parameters) >= 0);
+
+    // Initialize the AVCodecContext to use the given AVCodec.
+    assert(avcodec_open2(codec_ctx, codec, NULL) >= 0);
+
+    assert(codec_contexts.size() == stream_ind);
+    codec_contexts.push_back(codec_ctx);
 }
 
 void Movie::init(std::string path){
     mutex.lock();
     movie_name = path;
+
     assert(avformat_open_input(&format_ctx, path.c_str(), NULL, NULL) == 0);
     assert(avformat_find_stream_info(format_ctx,  NULL) >= 0);
+
+    video_stream_index = -1;
+    audio_stream_index = -1;
+    subtitle_stream_index = -1;
+
     duration = (double)format_ctx->duration / 1000000; // us -> s
     n_streams = format_ctx->nb_streams;
+    std::cout << "Movie: " << movie_name << " Streams:" << n_streams
+              << " Duration:" << duration << std::endl;
 
     // find the video codec parameters and audio codec parameters
     for(int i = 0; i < format_ctx->nb_streams; i++){
-        AVCodecParameters *codec_parameters = NULL;
-        codec_parameters = format_ctx->streams[i]->codecpar;
-        if(codec_parameters->codec_type == AVMEDIA_TYPE_VIDEO){
-            parse_video_codec(i, codec_parameters);
-        }
-        else if(codec_parameters->codec_type == AVMEDIA_TYPE_AUDIO){
-            parse_audio_codec(i, codec_parameters);
-        }
+        parse_codec(i, format_ctx->streams[i]->codecpar);
     }
-    video_buf_len = min(300, max(0, (int)(radius_ms * video_fps / 1000)));
-    audio_buf_len = min(300, max(0, (int)(radius_ms * audio_fps / 1000)));
 
-    std::cout << "Movie: " << movie_name
-              << " Streams:" << n_streams
-              << " Duration:" << duration
-              << " VideoBufLen:" << video_buf_len
-              << " AudioBufLen:" << audio_buf_len
-              << std::endl;
-
+    if(video_stream_indexs.size() > 0){
+        set_video_codec(video_stream_indexs[0]);
+    }
+    if(audio_stream_indexs.size() > 0){
+        set_audio_codec(audio_stream_indexs[0]);
+    }
     mutex.unlock();
     return;
 }
@@ -222,7 +209,7 @@ void Movie::decode_one_packet(){
 
 bool Movie::fetch_some_packets(int packet_num){
     // each time handle some packets
-    double st = (double)(QDateTime::currentDateTime().toMSecsSinceEpoch());
+    double st = current_sys_ms();
     int i = 0;
     // 5 more frames for further play
     while((i < packet_num) ||
@@ -238,7 +225,7 @@ bool Movie::fetch_some_packets(int packet_num){
         }
         i++;
     }
-    double et = (double)(QDateTime::currentDateTime().toMSecsSinceEpoch());
+    double et = current_sys_ms();
     /*
     std::cout << "Fetch-cost: " << et - st << " ms"
               << ", video-frame-len:" << video_frames.size()
@@ -269,7 +256,7 @@ bool Movie::play_video_frame(){
     if(last_video_sys < 0){
          write_rgb_frame();
         last_video_sys = current_sys_ms();
-        last_video_pts = video_pts_to_ms(video_frames[video_frame_ind]->pts);
+        last_video_pts = pts_to_ms(video_frames[video_frame_ind]->pts, video_timebase);
         mutex.unlock();
         return true;
     }
@@ -284,12 +271,12 @@ bool Movie::play_video_frame(){
             video_frame_ind = ind;
             write_rgb_frame();
             last_video_sys = current_sys_ms();
-            last_video_pts = video_pts_to_ms(video_frames[video_frame_ind]->pts);
+            last_video_pts = pts_to_ms(video_frames[video_frame_ind]->pts, video_timebase);
             mutex.unlock();
             return true;
         }
         else{
-            // video forward too much, need to wait
+            // video forward too much, need to wait, when hard seek
             double head_video_pts = pts_to_ms(video_frames.front()->pts, video_timebase);
             if(last_audio_pts <= head_video_pts){
                 std::cout << "Warning: Sync Bad Video Forward Too Much, Wait" << std::endl;
@@ -302,7 +289,7 @@ bool Movie::play_video_frame(){
             // video behind too much, need to clear the buf
             double tail_video_pts = pts_to_ms(video_frames.back()->pts, video_timebase);
             if(last_audio_pts >= tail_video_pts){
-                std::cout << "Warning: Sync Bad Video Forward Too Much, Clear" << std::endl;
+                std::cout << "Warning: Sync Bad Video Backward Too Much, Clear" << std::endl;
                 clear_frame_vectors(video_frames);
                 video_frame_ind = 0;
                 last_video_pts = last_video_sys = -1;
@@ -329,7 +316,7 @@ bool Movie::play_video_frame(){
         next_ind--;
     }
 
-    double cur_pts = video_pts_to_ms(video_frames[next_ind]->pts);
+    double cur_pts = pts_to_ms(video_frames[next_ind]->pts, video_timebase);
     double cur_sys = current_sys_ms();
     double diff_sys = (cur_sys - last_video_sys);
     double diff_pts = (cur_pts - last_video_pts) / play_times;
@@ -358,7 +345,7 @@ bool Movie::play_audio_frame(){
     // show current frame
     if(last_audio_sys < 0){
         last_audio_sys = current_sys_ms();
-        last_audio_pts = audio_pts_to_ms(audio_frames[audio_frame_ind]->pts);
+        last_audio_pts = pts_to_ms(audio_frames[audio_frame_ind]->pts, audio_timebase);
         write_audio_frame();
         mutex.unlock();
         return true;
@@ -380,7 +367,7 @@ bool Movie::play_audio_frame(){
         next_ind--;
     }
 
-    double cur_pts = audio_pts_to_ms(audio_frames[next_ind]->pts);
+    double cur_pts = pts_to_ms(audio_frames[next_ind]->pts, audio_timebase);
     double cur_sys = current_sys_ms();
     double diff_sys = (cur_sys - last_audio_sys);
     double diff_pts = (cur_pts - last_audio_pts) / play_times;
@@ -424,67 +411,6 @@ int Movie::binary_search(double millsecs, std::vector<AVFrame*> frames, AVRation
     return -1;
 }
 
-// search the nearest frame
-int Movie::search_video_frame_by_ms(double millsecs){
-    int cur_ind = video_frame_ind;
-    double cur_ms = video_pts_to_ms(video_frames[cur_ind]->pts);
-    double pre_ms = cur_ms;
-
-    if(cur_ms <= millsecs){
-        while(cur_ms <= millsecs){
-            pre_ms = cur_ms;
-            assert(++cur_ind < video_frames.size());
-            cur_ms = video_pts_to_ms(video_frames[cur_ind]->pts);
-        }
-        assert(pre_ms <= millsecs && cur_ms > millsecs);
-        //std::cout << "target:" << millsecs << " sml_ms:" << pre_ms << " big_ms:" << cur_ms << std::endl;
-        return cur_ind;
-    }
-
-    if(cur_ms > millsecs){
-        while(cur_ms > millsecs){
-            pre_ms = cur_ms;
-            assert(--cur_ind >= 0);
-            cur_ms = video_pts_to_ms(video_frames[cur_ind]->pts);
-        }
-        assert(cur_ms <= millsecs && pre_ms > millsecs);
-        //std::cout << "target:" << millsecs << " sml_ms:" << cur_ms << " big_ms:" << pre_ms << std::endl;
-        return cur_ind;
-    }
-    assert(false);
-}
-
-// search the nearest frame
-int Movie::search_audio_frame_by_ms(double millsecs){
-    int cur_ind = audio_frame_ind;
-    double cur_ms = audio_pts_to_ms(audio_frames[cur_ind]->pts);
-    double pre_ms = cur_ms;
-
-    if(cur_ms <= millsecs){
-        while(cur_ms <= millsecs){
-            pre_ms = cur_ms;
-            assert(++cur_ind < audio_frames.size());
-            cur_ms = audio_pts_to_ms(audio_frames[cur_ind]->pts);
-        }
-        assert(pre_ms <= millsecs && cur_ms > millsecs);
-        //std::cout << "target:" << millsecs << " sml_ms:" << pre_ms << " big_ms:" << cur_ms << std::endl;
-        return cur_ind;
-    }
-
-    if(cur_ms > millsecs){
-        while(cur_ms > millsecs){
-            pre_ms = cur_ms;
-            assert(--cur_ind >= 0);
-            cur_ms = audio_pts_to_ms(audio_frames[cur_ind]->pts);
-        }
-        assert(cur_ms <= millsecs && pre_ms > millsecs);
-        //std::cout << "target:" << millsecs << " sml_ms:" << cur_ms << " big_ms:" << pre_ms << std::endl;
-        return cur_ind;
-    }
-    assert(false);
-}
-
-
 bool Movie::seek(double millsecs){
     mutex.lock();
     if(video_frames.size() <= 0 || audio_frames.size() <= 0){
@@ -492,21 +418,17 @@ bool Movie::seek(double millsecs){
         mutex.unlock();
         return res;
     }
-    double head_video_ms = video_pts_to_ms(video_frames.front()->pts);
-    double head_audio_ms = audio_pts_to_ms(audio_frames.front()->pts);
-    double tail_video_ms = video_pts_to_ms(video_frames.back()->pts);
-    double tail_audio_ms = audio_pts_to_ms(audio_frames.back()->pts);
-    double head_ms = head_video_ms > head_audio_ms ? head_video_ms : head_audio_ms;
-    double tail_ms = tail_video_ms > tail_audio_ms ? tail_audio_ms : tail_video_ms;
+    int video_ind = binary_search(millsecs, video_frames, video_timebase);
+    int audio_ind = binary_search(millsecs, audio_frames, audio_timebase);
 
-    if(millsecs < head_ms || millsecs > tail_ms){
+    if(video_ind < 0 || audio_ind < 0){
         bool res = hard_seek(millsecs);
         mutex.unlock();
         return res;
     }
     // target frame is inside the vectors
-    video_frame_ind = search_video_frame_by_ms(millsecs);
-    audio_frame_ind = search_audio_frame_by_ms(millsecs);
+    video_frame_ind = video_ind;
+    audio_frame_ind = audio_ind;
     last_audio_pts = last_video_pts = -1;
     last_audio_sys = last_video_sys = -1;
     write_rgb_frame();
@@ -662,14 +584,6 @@ int Movie::get_audio_sample_rate(){
     return audio_sample_rate;
 }
 
-double Movie::audio_pts_to_ms(int64_t pts){
-    return (double)pts * av_q2d(audio_timebase) * 1000;
-}
-
-double Movie::video_pts_to_ms(int64_t pts){
-    return (double)pts * av_q2d(video_timebase) * 1000;
-}
-
 double Movie::pts_to_ms(int64_t pts, AVRational timebase){
     return (double)pts * av_q2d(timebase) * 1000;
 }
@@ -680,7 +594,7 @@ double Movie::get_video_frame_ms(){
         mutex.unlock();
         return 0;
     }
-    double ans = video_pts_to_ms(video_frames[video_frame_ind]->pts);
+    double ans = pts_to_ms(video_frames[video_frame_ind]->pts, video_timebase);
     mutex.unlock();
     return ans;
 }
@@ -691,7 +605,7 @@ double Movie::get_audio_frame_ms(){
         mutex.unlock();
         return 0;
     }
-    double ans = audio_pts_to_ms(audio_frames[audio_frame_ind]->pts);
+    double ans = pts_to_ms(audio_frames[audio_frame_ind]->pts, audio_timebase);
     mutex.unlock();
     return ans;
 }

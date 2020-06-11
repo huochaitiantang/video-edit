@@ -16,6 +16,8 @@
 #include <QCoreApplication>
 #include <QAudioOutput>
 #include <QAudioFormat>
+#include <QComboBox>
+#include <QPushButton>
 #include "movie.h"
 #include "fetchframethread.h"
 
@@ -24,10 +26,19 @@ class ImgLabel : public QLabel
 
     Q_OBJECT
     private:
-        QImage * image = NULL;
-        QLabel * info;
         Movie* movie = NULL;
-        QSlider * progress;
+        QImage * image = NULL;
+        QLabel * play_info = NULL;
+        QSlider * progress = NULL;
+        QPushButton * open_button = NULL;
+        QPushButton * control_button = NULL;
+        QComboBox * play_times_box = NULL;
+        QLineEdit* jump_text = NULL;
+        QPushButton* jump_button = NULL;
+
+        std::vector<double> play_times = {1.0, 0.25, 0.5, 0.75, 1.25, 1.5, 2.0, 2.5, 3.0, 5.0};
+        std::vector<double> fast_forwards = {-20, -5, -1, -0.2, -0.05, 0.05, 0.2, 1, 5, 20};
+
         int W = 720;
         int H = 360;
         int image_h, image_w, top_h, top_w;
@@ -48,7 +59,7 @@ class ImgLabel : public QLabel
         void clear_movie();
         std::string format_time(double second);
         void init_qimage(QImage * img, int H, int W);
-
+        void set_second(double target_ms);
 
     private slots:
         void set_progress_start();
@@ -56,19 +67,18 @@ class ImgLabel : public QLabel
         void progress_change();
         void update_image();
         void update_audio();
+        void click_open();
+        void click_control();
+        void play_times_changed();
+        void click_jump();
+        void fast_forward_clicked(int index);
 
     public:
-        ImgLabel(QWidget *parent, QLabel *info, QSlider *progress);
+        ImgLabel(QWidget *parent, int start_w, int start_h, int w, int h);
         ~ImgLabel();
         void set_movie(std::string path);
-        void play();
-        void pause();
-
         int get_W();
         int get_H();
-        void set_play_times(double x);
-        void set_second(double target_ms);
-        void fast_forward_second(double delta);
 
     protected:
         void mouseMoveEvent(QMouseEvent *event);

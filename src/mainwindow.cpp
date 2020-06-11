@@ -22,8 +22,8 @@ MainWindow::MainWindow(QWidget *parent)
     imglabel = new ImgLabel(this, 0, 0, W, H - 80);
 
     //for debug
-    std::string path = "E:/QT/videos/S2-P5-160912.mp4";
-    imglabel->set_movie(path);
+    //std::string path = "E:/QT/videos/S2-P5-160912.mp4";
+    //imglabel->set_movie(path);
 }
 
 MainWindow::~MainWindow()

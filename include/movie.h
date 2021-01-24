@@ -24,9 +24,11 @@ extern "C" {
 #include<thread>
 #include<QMutex>
 #include<QTime>
+#include<QQueue>
 #include<QCoreApplication>
 #include <QAudioOutput>
 #include <QAudioFormat>
+#include <QWaitCondition>
 
 class Movie
 {
@@ -59,28 +61,35 @@ private:
     int subtitle_stream_index;
 
     std::vector<AVCodecContext*> codec_contexts;
-    std::vector<AVFrame*> video_frames;
-    std::vector<AVFrame*> audio_frames;
-    int video_frame_ind = 0;
-    int audio_frame_ind = 0;
 
     double last_video_sys, last_video_pts;
     double last_audio_sys, last_audio_pts;
 
-    QMutex mutex;
+    QQueue<AVFrame*> v_frames;
+    QQueue<AVFrame*> a_frames;
+    int MAX_BUFFER_SIZE = 100;
+
+    QWaitCondition v_buffer_is_not_full;
+    QWaitCondition v_buffer_is_not_empty;
+    QWaitCondition a_buffer_is_not_full;
+    QWaitCondition a_buffer_is_not_empty;
+    QMutex v_mutex;
+    QMutex a_mutex;
+    QMutex ffmpeg_stream_mutex;
+
     char *pcm_buf = new char[48000];
     int pcm_len = 0;
     double play_times = 1.0;
 
-     // buffer the frame near 3 second, play window 5 ms
+    // buffer the frame near 3 second, play window 5 ms
     double radius_ms = 3000, play_window = 5;
-    int video_buf_len = 0, audio_buf_len = 0;
+    // int video_buf_len = 0, audio_buf_len = 0;
 
     void clear_frame_vectors(std::vector<AVFrame*> &vs);
     void parse_codec(int stream_ind, AVCodecParameters* codec_parameters);
 
-    void write_rgb_frame();
-    void write_audio_frame();
+    void write_rgb_frame(AVFrame* video_frame);
+    void write_audio_frame(AVFrame* audio_frame);
     double pts_to_ms(int64_t pts, AVRational timebase);
 
     void decode_one_packet();
@@ -89,6 +98,13 @@ private:
     int binary_search(double millsecs, std::vector<AVFrame*> frames, AVRational timebase);
     bool hard_seek(double millsecs);
     double current_sys_ms();
+
+    void push_one_video_frame(AVFrame* frame);
+    void push_one_audio_frame(AVFrame* frame);
+    AVFrame* pop_one_video_frame();
+    AVFrame* pop_one_audio_frame();
+    void clear_video_frames();
+    void clear_audio_frames();
 
 
 public:

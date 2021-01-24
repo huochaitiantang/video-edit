@@ -18,7 +18,7 @@ public:
 
 private:
     Movie* movie = NULL;
-    QMutex mutex;
+    QMutex mutex_fetch;
 
 //signals:
     //void message(const QString& info);
@@ -41,7 +41,7 @@ public:
 
 private:
     Movie* movie = NULL;
-    QMutex mutex;
+    QMutex mutex_video;
 
 signals:
     void play_one_frame_over();
@@ -64,7 +64,7 @@ public:
 
 private:
     Movie* movie = NULL;
-    QMutex mutex;
+    QMutex mutex_audio;
 
 signals:
     void play_one_frame_over();

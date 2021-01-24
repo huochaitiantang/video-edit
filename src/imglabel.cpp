@@ -146,14 +146,17 @@ void ImgLabel::set_movie(std::string path){
     // play signal connect
     fetch_frame_thread = new FetchFrameThread(this);
     fetch_frame_thread->set_movie(movie);
+    fetch_frame_thread->start();
 
     play_video_thread = new PlayVideoThread(this);
     play_video_thread->set_movie(movie);
     connect(play_video_thread, SIGNAL(play_one_frame_over()), this, SLOT(update_image()));
+    // play_video_thread->start();
 
     play_audio_thread = new PlayAudioThread(this);
     play_audio_thread->set_movie(movie);
     connect(play_audio_thread, SIGNAL(play_one_frame_over()), this, SLOT(update_audio()));
+    // play_audio_thread->start();
 
     update_image();
 }
@@ -345,9 +348,9 @@ void ImgLabel::mouseReleaseEvent(QMouseEvent *event){
 void ImgLabel::paintEvent(QPaintEvent *event){
     QLabel::paintEvent(event);
 
-    if(fetch_frame_thread){
-        fetch_frame_thread->start();
-    }
+//    if(fetch_frame_thread){
+//        fetch_frame_thread->start();
+//    }
     if(on_play && !display_lock && play_video_thread && play_audio_thread){
         play_video_thread->start();
         play_audio_thread->start();
